@@ -128,15 +128,15 @@ famr <- function(niter, Y, X, Z=NULL, Z_int=NULL, K=2, id=NULL,
       
       # NOTE: rotate after scaling. Rotation does not change between-outcome variance
       # Varimax rotation of B
-      temp_B_varimax <- array(0, dim=dim(scale_B))
       if (varimax) {
+        temp_B_varimax <- array(0, dim=dim(scale_B))
         j <- 1
         while (j < (K + K*q_int)) {
           temp_B_varimax[j:(j+K-1),] <- t(vari_rot) %*% scale_B[j:(j+K-1),]
           j <- j + K
         }
+        sims[["B_varimax"]][s-nwarmup, , ] <- temp_B_varimax
       }
-      sims[["B_varimax"]][s-nwarmup, , ] <- temp_B_varimax
       
       # Effects in original predictors
       temp_Bx <- matrix(0, nrow=(p + p*q_int), ncol=t)

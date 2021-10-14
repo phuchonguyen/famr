@@ -56,16 +56,6 @@ get_k_I <- function(K_int, K, q_int, fa_interact) {
   return(k_I)
 }
 
-# MBSP prior using Three param beta normal prior corresponding to Horseshoe
-# "horseshoe prior (u = 0.5, a = 0.5), the Strawderman-Berger prior (u = 1, a = 0.5), 
-# and the normalexponential-gamma (NEG) prior (u = 1, a > 0)." (Bai & Gosh 2018)
-# "Note that the special case for a = u = 1/2 in Figure 1(a) gives the horseshoe prior. 
-# Also when u = phi = 1 and a = 1/2, this representation yields the Strawderman-Berger prior. 
-# For a fixed value of phi, smaller u values yield a density on theta_j that is more peaked at zero, 
-# while smaller values of a yield a density on theta_j that is heavier tailed. 
-# For fixed values of u and a, decreasing phi shifts the mass of the density on ρj from left to right, 
-# suggesting more support for stronger shrinkage. That said, the density assigned in the neighborhood 
-# of theta_j = 0 increases while making the overall density lighter-tailed. (Armagan, Dunson, Clyde, 2011)
 update_B_TPBN <- function(prm, Y, X, K, Z, Z_int, u, a, tau) {
   eta_int <- get_eta_int(prm$eta, K, Z, Z_int, prm$fa_interact, prm$id)
   out <- update_zeta_nu_TPBN(Y, prm$B, prm$nu, prm$zeta, prm$Sigmainv, u, a, tau)
@@ -106,8 +96,8 @@ update_zeta_nu_TPBN <- function(Y, B, nu, zeta, Sigmainv, u, a, tau) {
     chi <- max(t(b)%*%Sinv%*%b, .Machine$double.eps) # to prevent chi parameter from collapsing to 0 from MBSP
     psi <- 2*zeta[i]
     lambda <- u-q*0.5
-    #nu[i] <- .Call(GIGrvg:::"C_rgig", n=1, lambda = lambda, chi = chi, psi = psi)
-    nu[i] <- GIGrvg::rgig(n = 1, lambda = lambda, chi = chi, psi = psi)
+    nu[i] <- .Call(GIGrvg:::"C_rgig", n=1, lambda = lambda, chi = chi, psi = psi)
+    #nu[i] <- GIGrvg::rgig(n = 1, lambda = lambda, chi = chi, psi = psi)
   }
   
   stopifnot(sum(is.na(zeta)) == 0)

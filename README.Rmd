@@ -1,0 +1,101 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# famr
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of famr is to fit a Bayesian factor model for multivariate, mixed responses that addresses multicollinearity in the predictors and provides more precise estimates through the sharing of information between responses.
+
+## Installation
+
+
+You may install the development version from [GitHub](https://github.com/) with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("phuchonguyen/famr")
+```
+
+## Example
+
+This is a basic example which shows you how to use FAMR to model two outcomes given six highly correlated predictors and one covariate:
+
+```{r loadlib}
+library(famr)
+```
+
+```{r makedat, include=FALSE}
+set.seed(111)
+n <- 100
+K <- 2
+p <- 6
+t <- 3
+Eta <- matrix(rnorm(n*K), n, K)
+colnames(Eta) <- paste0("e", 1:K)
+Theta <- matrix(c(rep(rep(c(1,0), each=p/2), K/2), rep(rep(c(0,1), each=p/2), K/2)), p, K) # block structure
+Theta <- abs(rnorm(K*p, 2))*Theta
+sigmax <- rep(.5, p)
+sigmax_sqinv <- 1/sigmax^2
+X <- tcrossprod(Eta, Theta) + t(matrix(rnorm(n*p, rep(0, p), sigmax), p, n))
+Z_int <- array(rnorm(n), dim=c(n, 1))
+Eta_int <- model.matrix(~. - 1, data = as.data.frame(Eta))
+Eta_int <- cbind(Eta_int, apply(Eta, 2, function(x) x*Z_int))
+K_int <- ncol(Eta_int)
+B <- matrix(c(.75, 0, 0, 0, 
+              2.0, 0, 0, 0,
+              1.2, 0, 0, 0), 4, 3)
+maineffects <- diag(sigmax_sqinv) %*% Theta %*% solve(t(Theta) %*% diag(sigmax_sqinv) %*% Theta + diag(1, K)) %*% B[1:2, ]
+Eta_extra <- matrix(rnorm(n*K), n, K)
+B_extra <- matrix(rnorm(t*K, rep(0, K), 1), K, t)
+sigmay <- diag(runif(t, 0.7, 1.5))
+Sigma <- crossprod(B_extra, B_extra) + sigmay
+Y1 <- Eta_int%*%B + Eta_extra%*%B_extra +  MASS::mvrnorm(nrow(Eta), rep(0, t), sigmay)
+Y2 <- Eta_int%*%B + Eta_extra%*%B_extra +  MASS::mvrnorm(nrow(Eta), rep(0, t), sigmay)
+Y <- rbind(Y1, Y2)
+id <- c(1:nrow(Y1), 1:nrow(Y2))
+X=rbind(X, X)
+Z_int=rbind(Z_int, Z_int)
+```
+
+
+Fit the model assuming the six correlated predictors come from two latent factor
+
+```{r fitmod}
+s <- Sys.time()
+out <- famr(Y=Y, X=X, K=2, Z_int=Z_int, niter=5000, id=id, varimax=TRUE)
+print(Sys.time() - s)
+```
+
+Check trace plots for convergence
+
+```{r diagnostics, echo=FALSE}
+par(mfrow=c(1,3))
+for (i in 1:3) {
+  matplot(out$Bx[,,i], type="l")
+}
+```
+
+
+Compare the inferred effects with the truth
+
+```{r result, echo=FALSE}
+par(mfrow=c(1,2))
+image(B, main="true effects")
+image(apply(out$B_varimax[,,], c(2,3), mean), main="posterior mean with varimax")
+```
+
+

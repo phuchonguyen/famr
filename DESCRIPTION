@@ -1,0 +1,15 @@
+Package: famr
+Type: Package
+Title: Factor Analysis for Mixed Responses
+Version: 1.0.1
+Date: 2021-10-13
+Author: Phuc Nguyen
+Maintainer: Phuc Nguyen <phuc.nguyen@duke.edu>
+Description: A Bayesian factor model for multivariate, mixed responses that addresses
+    multicollinearity in the predictors and provides more precise estimates through 
+    the sharing of information between responses.
+License: GPL (>= 2)
+Imports: 
+    Rcpp (>= 1.0.6),
+LinkingTo: Rcpp, RcppArmadillo
+RoxygenNote: 7.1.1

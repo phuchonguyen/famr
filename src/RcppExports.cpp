@@ -6,6 +6,70 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
+// rgig_cpp
+double rgig_cpp(double lam, double chi, double psi);
+RcppExport SEXP _famr_rgig_cpp(SEXP lamSEXP, SEXP chiSEXP, SEXP psiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type lam(lamSEXP);
+    Rcpp::traits::input_parameter< double >::type chi(chiSEXP);
+    Rcpp::traits::input_parameter< double >::type psi(psiSEXP);
+    rcpp_result_gen = Rcpp::wrap(rgig_cpp(lam, chi, psi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// update_zeta
+arma::vec update_zeta(arma::vec psi, int q, double global_shrink);
+RcppExport SEXP _famr_update_zeta(SEXP psiSEXP, SEXP qSEXP, SEXP global_shrinkSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::vec >::type psi(psiSEXP);
+    Rcpp::traits::input_parameter< int >::type q(qSEXP);
+    Rcpp::traits::input_parameter< double >::type global_shrink(global_shrinkSEXP);
+    rcpp_result_gen = Rcpp::wrap(update_zeta(psi, q, global_shrink));
+    return rcpp_result_gen;
+END_RCPP
+}
+// update_psi
+arma::vec update_psi(arma::mat B, arma::mat Sigmainv, arma::mat B0, arma::vec zeta, int q, int p);
+RcppExport SEXP _famr_update_psi(SEXP BSEXP, SEXP SigmainvSEXP, SEXP B0SEXP, SEXP zetaSEXP, SEXP qSEXP, SEXP pSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type B(BSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Sigmainv(SigmainvSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type B0(B0SEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type zeta(zetaSEXP);
+    Rcpp::traits::input_parameter< int >::type q(qSEXP);
+    Rcpp::traits::input_parameter< int >::type p(pSEXP);
+    rcpp_result_gen = Rcpp::wrap(update_psi(B, Sigmainv, B0, zeta, q, p));
+    return rcpp_result_gen;
+END_RCPP
+}
+// update_B_TPBN
+arma::mat update_B_TPBN(arma::mat X, arma::mat Y, arma::mat Sigma, arma::mat B0, arma::vec psi, int q, int p);
+RcppExport SEXP _famr_update_B_TPBN(SEXP XSEXP, SEXP YSEXP, SEXP SigmaSEXP, SEXP B0SEXP, SEXP psiSEXP, SEXP qSEXP, SEXP pSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type X(XSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Sigma(SigmaSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type B0(B0SEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type psi(psiSEXP);
+    Rcpp::traits::input_parameter< int >::type q(qSEXP);
+    Rcpp::traits::input_parameter< int >::type p(pSEXP);
+    rcpp_result_gen = Rcpp::wrap(update_B_TPBN(X, Y, Sigma, B0, psi, q, p));
+    return rcpp_result_gen;
+END_RCPP
+}
 // update_eta_gibbs_cpp
 arma::mat update_eta_gibbs_cpp(arma::mat eta, arma::mat B, arma::mat Theta, arma::mat Sigmay_inv, arma::vec sigmax_sqinv, arma::mat Y, arma::mat X, int K, int p, int t, int n, int q, int q_int, arma::vec uid, arma::mat Z, arma::mat Z_int);
 RcppExport SEXP _famr_update_eta_gibbs_cpp(SEXP etaSEXP, SEXP BSEXP, SEXP ThetaSEXP, SEXP Sigmay_invSEXP, SEXP sigmax_sqinvSEXP, SEXP YSEXP, SEXP XSEXP, SEXP KSEXP, SEXP pSEXP, SEXP tSEXP, SEXP nSEXP, SEXP qSEXP, SEXP q_intSEXP, SEXP uidSEXP, SEXP ZSEXP, SEXP Z_intSEXP) {
@@ -148,6 +212,10 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_famr_rgig_cpp", (DL_FUNC) &_famr_rgig_cpp, 3},
+    {"_famr_update_zeta", (DL_FUNC) &_famr_update_zeta, 3},
+    {"_famr_update_psi", (DL_FUNC) &_famr_update_psi, 6},
+    {"_famr_update_B_TPBN", (DL_FUNC) &_famr_update_B_TPBN, 7},
     {"_famr_update_eta_gibbs_cpp", (DL_FUNC) &_famr_update_eta_gibbs_cpp, 16},
     {"_famr_submat_cpp", (DL_FUNC) &_famr_submat_cpp, 3},
     {"_famr_impute_X_lod_cpp", (DL_FUNC) &_famr_impute_X_lod_cpp, 8},

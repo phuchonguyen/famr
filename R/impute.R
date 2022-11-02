@@ -22,7 +22,7 @@ impute_Y <- function(prm, X, K, Z, Z_int, Y, O, binary, Yraw, missing_Y) {
   
   if (sum(binary) > 0) {
     Y <- impute_Yprobit_cpp(Y, M, Sigma, Yraw, binary, nrow(Y), ncol(Y))
-    Yraw[, binary == 1][O[, binary == 1] == 0] <- 1 * (Y[, binary == 1] > 0)
+    Yraw[, binary == 1][O[, binary == 1] == 0] <- 1 * (Y[, binary == 1][O[, binary == 1] == 0] > 0)
   }
   
   return(list(Y=Y, Yraw=Yraw))

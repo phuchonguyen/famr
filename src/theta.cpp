@@ -30,7 +30,7 @@ arma::mat update_phi_MGP_cpp(arma::mat Theta, arma::vec tau, int K, int p,
     for (int h = 0; h < K; h++) {
       double shape = (v1(j, h) + 1) * 0.5;
       double rate = (v2(j, h) + tau(h) * pow(Theta(j, h), 2)) * 0.5;
-      phi(j, h) = arma::randg( distr_param(shape, 1/rate));
+      phi(j, h) = arma::randg(distr_param(shape, 1/rate));
     }
   }
   

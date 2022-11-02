@@ -21,3 +21,20 @@ update_Theta_MGP <- function(prm, Y, X, K, v1, v2) {
   
   return(prm)
 }
+
+#' Place Gaussian priors on the elements of the factor loading matrix
+update_Theta_normal <- function(prm, Y, X, K) {
+  Dinv_j <- diag(1/100, K, K)
+  ete <- crossprod(prm$eta, prm$eta)
+  p <- ncol(X)
+  Theta <- matrix(0, p, K)
+  for (j in 1:p) {
+    Xj <- X[, j]
+    sigmax_sqinv_j <- prm$sigmax_sqinv[j]
+    Vj <- solve(Dinv_j + ete / sigmax_sqinv_j)
+    mj <- crossprod(prm$eta, Xj) / sigmax_sqinv_j
+    Theta[j, ] <- MASS::mvrnorm(1, mu = Vj %*% mj, Sigma = Vj)
+  }
+  prm[["Theta"]] <- Theta
+  return(prm)
+}

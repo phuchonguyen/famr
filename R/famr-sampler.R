@@ -1,91 +1,123 @@
 famr <- function(niter, Y, X, Z=NULL, Z_int=NULL, K=2, id=NULL,
-                  p_adapt=0.5, epsilon_bar=1, H=0, gamma=0.05, t0=10, kappa=0.75, delta=0.65,
+                  p_adapt=0.5, thin=1, epsilon_bar=1, H=0, gamma=0.05, t0=10, kappa=0.75, delta=0.65,
                   v1=NULL, v2=NULL, Ilod=NULL, loda=NULL, lodb=NULL,
                   B_u=1, B_a=0.5, B_tau=NULL,  # Strawderman-Berger prior
                   missing_Y=FALSE, verbose=FALSE, binary=NULL,
-                  varimax=F) {
+                  varimax=F, b0_global_shrinkage=1, 
+                 eta=NULL, Theta=NULL, B=NULL, Sigma=NULL) {
   fa_interact=FALSE #TODO: Remove this feature
   
   if (is.vector(Y)) Y <- matrix(Y, ncol = 1)
   if (nrow(Y) != nrow(X)) stop("Missmatched number of rows in Y and X")
   # id for potential repeated measurements/random intercepts
   if (is.null(id)) id <- 1:nrow(Y)
-  X <- X[!duplicated(id), ]   # reduce X to a unique subject per row
+  X <- X[!duplicated(id), ]   # reduce X to a unique subject per row (when there are repeated measurements of Y)
+
+  q <- ncol(Y)  # number of outcomes
+  n <- length(unique(id)) # number of subjects
+  p <- ncol(X)  # number of components in mixtures
+  p_z <- ncol(Z) # number of covariates
+  p_int <- ncol(Z_int) # number of covariates interacting with the mixture latent factors
+  K <- K  # number of factors
+  
+  # Handle binary outcomes using probit model
   if (is.null(binary)) binary <- rep(0, ncol(Y)) 
   stopifnot(length(binary) == ncol(Y))
   Yraw <- Y
-  
-  t <- ncol(Y)  # number of outcome times
-  n <- length(unique(id)) # number of subjects
-  p <- ncol(X)  # number of components in mixtures
-  q <- ncol(Z)
-  q_int <- ncol(Z_int)
-  K <- K  # number of factors
-  # Mean-centered X, Y to remove intercepts
+  if (sum(binary) > 0) {
+    # Initialize probit latent variables to random normal draws
+    Y[,binary==1] <- abs(rnorm(length(Y[,binary==1])))*(-1)^(Y[,binary==1]==0)
+  }
+  # Mean-centered X to remove intercepts
   Xmean <- colMeans(X, na.rm = TRUE)
   X <- X - tcrossprod(rep(1, nrow(X)), Xmean)
-  Y <- Y - tcrossprod(rep(1, nrow(Y)), colMeans(Y, na.rm = TRUE))
-  O <- (!is.na(Y))*1  # indicators of missing values in Y
-  if (missing_Y) {
+  #Y <- Y - tcrossprod(rep(1, nrow(Y)), colMeans(Y, na.rm = TRUE))
+  # If there are missing values in Y
+  O <- (!is.na(Y))*1 # indicators of observed Y
+  if (missing_Y) { # initialize missing values to be zero
     Y[O == 0] <- 0
+    Yraw[O == 0] <- 0
   }
   if (is.null(colnames(X))) colnames(X) <- paste0("x", 1:p)
-  if (is.null(q)) q <- 0
-  if(q > 0 & is.null(colnames(Z))) colnames(Z) <- paste0("z", 1:q)
-  if (is.null(q_int)) q_int <- 0
-  if (q_int > 0 & is.null(colnames(Z_int))) colnames(Z_int) <- paste0("zi", 1:q_int)
-  if (is.null(v1)) v1 <- matrix(1, p, K)
-  if (is.null(v2)) v2 <- matrix(1, p, K)
-  if (is.null(B_tau)) B_tau <- 1/(t*sqrt(n * log(n))) # as recommended by Bai & Ghosh
+  if (is.null(p_z)) p_z <- 0
+  if (p_z > 0 & is.null(colnames(Z))) colnames(Z) <- paste0("z", 1:p_z)
+  if (is.null(p_int)) p_int <- 0
+  if (p_int > 0 & is.null(colnames(Z_int))) colnames(Z_int) <- paste0("zi", 1:p_int)
+  if (is.null(v1)) v1 <- matrix(1, p, K) # TODO: remove???
+  if (is.null(v2)) v2 <- matrix(1, p, K) # TODO: remove???
+  # as recommended by Bai & Ghosh
+  if (is.null(B_tau)) B_tau <- 1/(q*sqrt(n * log(n))) #TODO: remove??? 
   
   # Setting initial conditions
-  prm <- list()   
+  prm <- list()
   ### For Regression
   prm[["id"]] <- id
+  # K_int is the total number of predictors including 
+  # the K factors, K*p_int interactions, and p_z covariates
   K_int <- K
-  prm[["fa_interact"]] <- fa_interact
-  if (!is.null(q)) K_int <- K_int + q
-  if (q_int > 0) K_int <- K_int + q_int*K
-  prm[["B"]] <- array(rnorm(t * K_int), dim = c(K_int, t))      # main effect & interactions matrix
-  prm[["nu"]] <- rep(1/2*1/(t*sqrt(n * log(n))), K_int)          # shrinkage on B
-  prm[["zeta"]] <- 1/2*prm$nu                                      # shrinkage on B
-  prm[["Sigma"]] <- diag(rgamma(t, 2, 1))           # covariance of y_i
-  prm[["Sigmainv"]] <- diag(1/diag(prm$Sigma))
-  prm[["l"]] <- rep(1, t)            # hierarchical IW
+  # TODO: remove fa_interact??? # prm[["fa_interact"]] <- fa_interact 
+  if (!is.null(p_z)) K_int <- K_int + p_z
+  if (p_int > 0) K_int <- K_int + p_int*K
+  prm[["alpha"]] <- rep(0, q) # outcome-specific intercept (needed for probit model)
+  prm[["B"]] <- array(rnorm(q * K_int), dim = c(K_int, q)) # main effect & interactions matrix
+  prm[["psi"]] <- rep(1/2*1/(q*sqrt(n * log(n))), K_int) # shrinkage on B
+  prm[["zeta"]] <- 1/2*prm$psi # shrinkage on B
+  # prm[["b0"]] <- rep(0, K_int)
+  # prm[["u0sq"]] <- rep(1, K_int)
+  # prm[["c0"]] <- rep(1, K_int)
+  # prm[["tau0sq"]] <- b0_global_shrinkage
+  # prm[["d0"]] <- 1
+  prm[["Sigma"]] <- diag(rgamma(q, 2, 1), q, q) # covariance of y_i
+  prm[["Sigmainv"]] <- diag(1/diag(prm$Sigma), q, q)
+  prm[["l"]] <- apply(Y, 2, var) # hierarchical IW or prior on IS
   ### For Factor model
   prm[["sigmax_sqinv"]] <- rgamma(p, 2.5*0.5, 2.5*0.084*0.5)    # noise variance
-  prm[["Theta"]]  <- array(rnorm(p * K, 0, 10), dim = c(p, K))  # loadings
-  # MGP Prior
-  prm[["phi"]]    <- array(rgamma(p * K, 1), dim = c(p, K))     # local shrinkage for Theta
-  prm[["delta"]]  <- rgamma(K, 1)                               # global shrinkage param for factor K
   prm[["eta"]]    <- array(rnorm(n * K), dim = c(n, K))         # random factors
+  prm[["Theta"]]  <- array(rnorm(p * K, 0, 10), dim = c(p, K))  # loadings
+  # Dirichlet-Laplace prior on the rows of Theta
+  prm[["tau"]] <- rep(0.5, p)
+  prm[["phi"]] <- matrix(rep(1/K, p*K), p, K)
+  prm[["omega"]] <- statmod::rinvgauss(p*K, (1/(2*K))/as.vector(prm$Theta), rep(1, p*K))
+  # MGP Prior
+  #prm[["phi"]]    <- array(rgamma(p * K, 1), dim = c(p, K))     # local shrinkage for Theta
+  #prm[["delta"]]  <- rgamma(K, 1)                               # global shrinkage param for factor K
   
   # Storage for outputs
   nwarmup <- round(niter/2)
-  sims <- list(B = array(NA, dim=c(niter - nwarmup, K_int, t)),
-               Bx = array(NA, dim=c(niter - nwarmup, (p + p*q_int), t)),
-               Sigma = array(NA, dim = c(niter - nwarmup, t, t)),
+  sims <- list(B = array(NA, dim=c(niter - nwarmup, K_int, q)),
+               Bx = array(NA, dim=c(niter - nwarmup, (p + p*p_int), q)),
+               # b0 = array(NA, dim=c(niter - nwarmup, K_int)),
+               # b0x = array(NA, dim=c(niter - nwarmup, p)), # main effect only
+               alpha = array(NA, dim=c(niter - nwarmup, q)), # outcome-specific intercept
+               Sigma = array(NA, dim = c(niter - nwarmup, q, q)),
                Theta = array(NA, dim = c(niter - nwarmup, p, K)),
                eta = array(NA, dim = c(niter - nwarmup, n, K)),
                sigmax_sqinv = array(NA, dim = c(niter - nwarmup, p)),
                Y_rep = array(NA, dim=c(niter - nwarmup, dim(Y))) 
   )
+  # TODO: remove varimax???
   if (varimax) {
     sims <- c(sims,
-              list(B_varimax = array(NA, dim=c(niter - nwarmup, K_int, t)),
+              list(B_varimax = array(NA, dim=c(niter - nwarmup, K_int, q)),
                    Theta_varimax = array(NA, dim = c(niter - nwarmup, p, K))
               ))
   }
   
   pb <- txtProgressBar(style = 3)
+  # prm[["Theta"]] <- Theta # TODO FOR DEBUGGING
+  # prm[["B"]] <- B # TODO FOR DEBUGGING
+  # prm[["Sigma"]] <- Sigma # TODO FOR DEBUGGING
+  #prm[["eta"]] <- eta # TODO FOR DEBUGGING
   for (s in 1:niter) {
     setTxtProgressBar(pb, s / niter)
     # Gibbs steps
     prm <- update_sigmax_sqinv(prm, Y, X, K)
-    prm <- update_Theta_MGP(prm, Y, X, K, v1, v2)
-    prm <- update_B_TPBN(prm, Y, X, K, Z, Z_int, B_u, B_a, B_tau)
-    prm <- update_Sigma_HIW(prm, Y, Z, Z_int, binary)
-    prm <- update_eta_gibbs(prm, Y, X, Z, Z_int, n, K, p, t, q, q_int)
+    # prm <- update_Theta_MGP(prm, Y, X, K, v1, v2)
+    # prm <- update_Theta_DL(prm, Y, X, K) # TODO implement
+    prm <- update_Theta_normal(prm, Y, X, K) # TODO TEST!!!
+    prm <- update_B(prm, Y, X, K, Z, Z_int, B_u, B_a, B_tau) # TODO TEST!!!
+    prm <- update_Sigma_HIW(prm, Y, Z, Z_int, binary) # TODO implement IW
+    prm <- update_eta_gibbs(prm, Y, X, Z, Z_int, n, K, p, q, p_z, p_int) # TODO TEST!!!
     
     # Imputation
     if (!is.null(Ilod) & !is.null(loda) & !is.null(lodb)) {
@@ -102,6 +134,8 @@ famr <- function(niter, Y, X, Z=NULL, Z_int=NULL, K=2, id=NULL,
       sims[["sigmax_sqinv"]][s-nwarmup, ] <- prm$sigmax_sqinv
       sims[["Theta"]][s-nwarmup, , ] <- prm$Theta 
       sims[["eta"]][s-nwarmup, , ] <- prm$eta
+      # sims[["b0"]][s-nwarmup, ] <- prm$b0
+      sims[["alpha"]][s-nwarmup, ] <- prm$alpha
       
       # Varimax rotation of Theta
       if (varimax) {
@@ -113,7 +147,7 @@ famr <- function(niter, Y, X, Z=NULL, Z_int=NULL, K=2, id=NULL,
       # Rescaling for probit latent variables
       scale_B <- prm$B
       scale_S <- prm$Sigma
-      if (sum(binary) > 0) {
+      if (sum(binary) > 0) { # TODO review this
         # Scale Sigma
         d <- sqrt(diag(prm$Sigma))
         temp_s <- d[binary == 1]
@@ -131,7 +165,7 @@ famr <- function(niter, Y, X, Z=NULL, Z_int=NULL, K=2, id=NULL,
       if (varimax) {
         temp_B_varimax <- array(0, dim=dim(scale_B))
         j <- 1
-        while (j < (K + K*q_int)) {
+        while (j < (K + K*p_int)) {
           temp_B_varimax[j:(j+K-1),] <- t(vari_rot) %*% scale_B[j:(j+K-1),]
           j <- j + K
         }
@@ -139,21 +173,22 @@ famr <- function(niter, Y, X, Z=NULL, Z_int=NULL, K=2, id=NULL,
       }
       
       # Effects in original predictors
-      temp_Bx <- matrix(0, nrow=(p + p*q_int), ncol=t)
+      temp_Bx <- matrix(0, nrow=(p + p*p_int), ncol=q)
       j <- 1
       jx <- 1
       Ainv <- solve( t(prm$Theta) %*% diag(prm$sigmax_sqinv) %*% prm$Theta + diag(1, K))
       Ax <- diag(prm$sigmax_sqinv) %*% prm$Theta %*% Ainv
-      while (j < (K + K*q_int)) {
+      while (j < (K + K*p_int)) {
         temp_Bx[jx:(jx+p-1),] <- Ax %*% scale_B[j:(j+K-1),]
         j <- j + K
         jx <- jx + p
       }
       sims[["Bx"]][s-nwarmup, , ] <- temp_Bx
+      #sims[["b0x"]][s-nwarmup, ] <- Ax %*% prm$b0[1:K]
       
       # Fitted values for Y
-      eta_int <- get_eta_int(prm$eta, K, Z, Z_int, fa_interact, id)
-      Y_rep <- eta_int %*% prm$B
+      eta_int <- get_eta_int(prm$eta, K, Z, Z_int, id)
+      Y_rep <- eta_int %*% prm$B + MASS::mvrnorm(nrow(Y), rep(0,q), prm$Sigma)
       if (sum(binary) > 0) {
         Y_rep[, binary == 1] <- 1 * (Y_rep[, binary == 1] > 0)
       }

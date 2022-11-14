@@ -6,6 +6,42 @@
 using namespace std;
 using namespace arma;
 
+// Integrate out eta and use Metropolis-Hasting to sample Theta with Gaussian priors
+double llike_T(const arma::mat& T, const arma::vec& sigmax_sqinv,
+               const arma::mat& X, int p, int n) {
+  double l = 0.0;
+  // Cholesky inverse of Theta^T Theta + diag(sigmax_sqinv)
+  arma::mat L = trimatl(arma::chol(T*T.t() + arma::diagmat(sigmax_sqinv), "lower"));
+  arma::mat V = arma::solve(trimatu(L.t()), arma::solve(L, arma::eye(p, p)));
+  for (int i = 0; i < n; i++) {
+    l += as_scalar(X.row(i) * V * X.row(i).t());
+  }
+  return -0.5 * l;
+}
+
+double lprior_T(const arma::mat& T) {
+  arma::vec vT = arma::vectorise(T);
+  return -0.5 * as_scalar(vT.t()*vT) / 100; // 100 is prior variance
+}
+
+// [[Rcpp::export]]
+int update_Theta_normal_mh_cpp(arma::mat& Theta, const arma::vec& sigmax_sqinv, 
+                                const arma::mat& X, double eps) {
+  // proposal from normal with scaling parameter eps
+  arma::mat prop = Theta + eps * arma::randn(Theta.n_rows, Theta.n_cols);
+  // log likelihood
+  int p = X.n_cols;
+  int n = X.n_rows;
+  double lp_prop = llike_T(prop, sigmax_sqinv, X, p, n) + lprior_T(prop);
+  double lp_cur = llike_T(Theta, sigmax_sqinv, X, p, n) + lprior_T(Theta);
+  // accept with log probability
+  if (log(randu<double>()) < (lp_prop-lp_cur)) {
+    Theta = prop;
+    return 1;
+  }
+  return 0;
+}
+
 // [[Rcpp::export]]
 arma::mat update_Theta_MGP_cpp(arma::mat eta, arma::vec sigmax_sqinv, 
                                arma::mat phi, arma::vec delta, arma::vec tau, 

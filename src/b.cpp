@@ -69,11 +69,11 @@ arma::vec update_psi(arma::mat B, arma::mat Sigmainv, arma::mat B0,
 arma::mat update_B_TPBN(arma::mat X, arma::mat Y, arma::mat Sigma, 
                         arma::mat B0, arma::vec psi, int q, int p) {
   arma::mat Psii = arma::diagmat(1 / psi);
-  arma::mat Lu = trimatl(arma::chol(X.t() * X + Psii, "lower"));
+  arma::mat LL = X.t() * X + Psii;
+  arma::mat Lu = trimatl(arma::chol(LL, "lower"));
   arma::mat Rv = trimatu(arma::chol(Sigma, "upper"));
   arma::mat M = arma::solve(trimatu(Lu.t()), arma::solve(Lu, X.t()*Y + Psii*B0));
   arma::mat B = M + arma::solve(trimatu(Lu.t()), arma::randn<arma::mat>(q, p)) * Rv;
-  
   return B;
 }
 

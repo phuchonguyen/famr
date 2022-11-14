@@ -17,8 +17,12 @@ update_B_TPBN <- function(X, Y, Sigma, B0, psi, q, p) {
     .Call(`_famr_update_B_TPBN`, X, Y, Sigma, B0, psi, q, p)
 }
 
-update_eta_gibbs_cpp <- function(eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, K, p, t, n, q, q_int, uid, Z, Z_int) {
-    .Call(`_famr_update_eta_gibbs_cpp`, eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, K, p, t, n, q, q_int, uid, Z, Z_int)
+update_eta_mh_cpp <- function(eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, uid, Z, Z_int, K, p, t, n, q, q_int, n_accepted, eps = 1e-3) {
+    invisible(.Call(`_famr_update_eta_mh_cpp`, eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, uid, Z, Z_int, K, p, t, n, q, q_int, n_accepted, eps))
+}
+
+update_eta_gibbs_cpp <- function(eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, uid, Z, Z_int, K, p, t, n, q, q_int) {
+    invisible(.Call(`_famr_update_eta_gibbs_cpp`, eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, uid, Z, Z_int, K, p, t, n, q, q_int))
 }
 
 submat_cpp <- function(M, idx, idy) {
@@ -35,6 +39,10 @@ impute_Ymis_cpp <- function(Y, M, Sigma, O, n, t) {
 
 impute_Yprobit_cpp <- function(Y, M, Sigma, Yraw, binary, n, t) {
     .Call(`_famr_impute_Yprobit_cpp`, Y, M, Sigma, Yraw, binary, n, t)
+}
+
+update_Theta_normal_mh_cpp <- function(Theta, sigmax_sqinv, X, eps) {
+    .Call(`_famr_update_Theta_normal_mh_cpp`, Theta, sigmax_sqinv, X, eps)
 }
 
 update_Theta_MGP_cpp <- function(eta, sigmax_sqinv, phi, delta, tau, K, p, X) {

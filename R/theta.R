@@ -38,3 +38,11 @@ update_Theta_normal <- function(prm, Y, X, K) {
   prm[["Theta"]] <- Theta
   return(prm)
 }
+
+
+#' Integrate out eta and use Metropolis-Hasting instead
+update_Theta_normal_mh <- function(prm, Y, X, K) {
+  accepted <- update_Theta_normal_mh_cpp(prm$Theta, prm$sigmax_sqinv, X, prm$Theta_eps)
+  prm[["Theta_n_accepted"]] <- prm$Theta_n_accepted + accepted
+  return(prm)
+}

@@ -70,30 +70,56 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// update_eta_gibbs_cpp
-arma::mat update_eta_gibbs_cpp(arma::mat eta, arma::mat B, arma::mat Theta, arma::mat Sigmay_inv, arma::vec sigmax_sqinv, arma::mat Y, arma::mat X, int K, int p, int t, int n, int q, int q_int, arma::vec uid, arma::mat Z, arma::mat Z_int);
-RcppExport SEXP _famr_update_eta_gibbs_cpp(SEXP etaSEXP, SEXP BSEXP, SEXP ThetaSEXP, SEXP Sigmay_invSEXP, SEXP sigmax_sqinvSEXP, SEXP YSEXP, SEXP XSEXP, SEXP KSEXP, SEXP pSEXP, SEXP tSEXP, SEXP nSEXP, SEXP qSEXP, SEXP q_intSEXP, SEXP uidSEXP, SEXP ZSEXP, SEXP Z_intSEXP) {
+// update_eta_mh_cpp
+void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Theta, const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv, const arma::mat& Y, const arma::mat& X, const arma::vec& uid, const arma::mat& Z, const arma::mat& Z_int, int K, int p, int t, int n, int q, int q_int, Rcpp::IntegerVector n_accepted, double eps);
+RcppExport SEXP _famr_update_eta_mh_cpp(SEXP etaSEXP, SEXP BSEXP, SEXP ThetaSEXP, SEXP Sigmay_invSEXP, SEXP sigmax_sqinvSEXP, SEXP YSEXP, SEXP XSEXP, SEXP uidSEXP, SEXP ZSEXP, SEXP Z_intSEXP, SEXP KSEXP, SEXP pSEXP, SEXP tSEXP, SEXP nSEXP, SEXP qSEXP, SEXP q_intSEXP, SEXP n_acceptedSEXP, SEXP epsSEXP) {
 BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat >::type eta(etaSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type B(BSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Theta(ThetaSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Sigmay_inv(Sigmay_invSEXP);
-    Rcpp::traits::input_parameter< arma::vec >::type sigmax_sqinv(sigmax_sqinvSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Y(YSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type X(XSEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type B(BSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Theta(ThetaSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Sigmay_inv(Sigmay_invSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type sigmax_sqinv(sigmax_sqinvSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type uid(uidSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Z(ZSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Z_int(Z_intSEXP);
     Rcpp::traits::input_parameter< int >::type K(KSEXP);
     Rcpp::traits::input_parameter< int >::type p(pSEXP);
     Rcpp::traits::input_parameter< int >::type t(tSEXP);
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
     Rcpp::traits::input_parameter< int >::type q(qSEXP);
     Rcpp::traits::input_parameter< int >::type q_int(q_intSEXP);
-    Rcpp::traits::input_parameter< arma::vec >::type uid(uidSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Z(ZSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Z_int(Z_intSEXP);
-    rcpp_result_gen = Rcpp::wrap(update_eta_gibbs_cpp(eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, K, p, t, n, q, q_int, uid, Z, Z_int));
-    return rcpp_result_gen;
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type n_accepted(n_acceptedSEXP);
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    update_eta_mh_cpp(eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, uid, Z, Z_int, K, p, t, n, q, q_int, n_accepted, eps);
+    return R_NilValue;
+END_RCPP
+}
+// update_eta_gibbs_cpp
+void update_eta_gibbs_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Theta, const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv, const arma::mat& Y, const arma::mat& X, const arma::vec& uid, const arma::mat& Z, const arma::mat& Z_int, int K, int p, int t, int n, int q, int q_int);
+RcppExport SEXP _famr_update_eta_gibbs_cpp(SEXP etaSEXP, SEXP BSEXP, SEXP ThetaSEXP, SEXP Sigmay_invSEXP, SEXP sigmax_sqinvSEXP, SEXP YSEXP, SEXP XSEXP, SEXP uidSEXP, SEXP ZSEXP, SEXP Z_intSEXP, SEXP KSEXP, SEXP pSEXP, SEXP tSEXP, SEXP nSEXP, SEXP qSEXP, SEXP q_intSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat& >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type B(BSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Theta(ThetaSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Sigmay_inv(Sigmay_invSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type sigmax_sqinv(sigmax_sqinvSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type uid(uidSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Z(ZSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Z_int(Z_intSEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type p(pSEXP);
+    Rcpp::traits::input_parameter< int >::type t(tSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type q(qSEXP);
+    Rcpp::traits::input_parameter< int >::type q_int(q_intSEXP);
+    update_eta_gibbs_cpp(eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, uid, Z, Z_int, K, p, t, n, q, q_int);
+    return R_NilValue;
 END_RCPP
 }
 // submat_cpp
@@ -160,6 +186,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// update_Theta_normal_mh_cpp
+int update_Theta_normal_mh_cpp(arma::mat& Theta, const arma::vec& sigmax_sqinv, const arma::mat& X, double eps);
+RcppExport SEXP _famr_update_Theta_normal_mh_cpp(SEXP ThetaSEXP, SEXP sigmax_sqinvSEXP, SEXP XSEXP, SEXP epsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat& >::type Theta(ThetaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type sigmax_sqinv(sigmax_sqinvSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(update_Theta_normal_mh_cpp(Theta, sigmax_sqinv, X, eps));
+    return rcpp_result_gen;
+END_RCPP
+}
 // update_Theta_MGP_cpp
 arma::mat update_Theta_MGP_cpp(arma::mat eta, arma::vec sigmax_sqinv, arma::mat phi, arma::vec delta, arma::vec tau, int K, int p, arma::mat X);
 RcppExport SEXP _famr_update_Theta_MGP_cpp(SEXP etaSEXP, SEXP sigmax_sqinvSEXP, SEXP phiSEXP, SEXP deltaSEXP, SEXP tauSEXP, SEXP KSEXP, SEXP pSEXP, SEXP XSEXP) {
@@ -216,11 +256,13 @@ static const R_CallMethodDef CallEntries[] = {
     {"_famr_update_zeta", (DL_FUNC) &_famr_update_zeta, 3},
     {"_famr_update_psi", (DL_FUNC) &_famr_update_psi, 6},
     {"_famr_update_B_TPBN", (DL_FUNC) &_famr_update_B_TPBN, 7},
+    {"_famr_update_eta_mh_cpp", (DL_FUNC) &_famr_update_eta_mh_cpp, 18},
     {"_famr_update_eta_gibbs_cpp", (DL_FUNC) &_famr_update_eta_gibbs_cpp, 16},
     {"_famr_submat_cpp", (DL_FUNC) &_famr_submat_cpp, 3},
     {"_famr_impute_X_lod_cpp", (DL_FUNC) &_famr_impute_X_lod_cpp, 8},
     {"_famr_impute_Ymis_cpp", (DL_FUNC) &_famr_impute_Ymis_cpp, 6},
     {"_famr_impute_Yprobit_cpp", (DL_FUNC) &_famr_impute_Yprobit_cpp, 7},
+    {"_famr_update_Theta_normal_mh_cpp", (DL_FUNC) &_famr_update_Theta_normal_mh_cpp, 4},
     {"_famr_update_Theta_MGP_cpp", (DL_FUNC) &_famr_update_Theta_MGP_cpp, 8},
     {"_famr_update_phi_MGP_cpp", (DL_FUNC) &_famr_update_phi_MGP_cpp, 6},
     {"_famr_update_delta_MGP_cpp", (DL_FUNC) &_famr_update_delta_MGP_cpp, 6},

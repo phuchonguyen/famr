@@ -6,8 +6,6 @@ get_eta_int <- function(eta, K, Z, Z_int, id) {
   if (is.null(colnames(eta_dup))) {
     colnames(eta_dup) <- paste0("e", 1:K)
   }
-  # if (fa_interact) {
-  #   eta_int <- model.matrix(~. + .^2 - 1, data = as.data.frame(eta_dup))
   eta_int <- eta_dup
   cnames <- colnames(eta_int)
   if (!is.null(Z_int)) {
@@ -33,12 +31,6 @@ get_k_I <- function(K_int, K, q_int) {
   for (k in 1:K) {
     k_I[k,k] <- 1
     h <- k+1
-    # while(h <= K & fa_interact) {
-    #   j <- j+1
-    #   k_I[k,j] <- 1
-    #   k_I[h,j] <- 1
-    #   h <- h+1
-    # }
   }
   if (!is.null(q_int)) {
     for (h in 1:q_int) {

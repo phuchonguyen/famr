@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+famr.Rproj
+Read-and-delete-me
+src/*.o
+src/*.so
+src/*.dll

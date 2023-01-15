@@ -2,13 +2,17 @@
 # Coefficients are order as : latent main effect, interactions between latent factors and covariates, covariates 
 get_eta_int <- function(eta, K, Z, Z_int, id) {
   uid <- unique(id)
-  eta_dup <- eta[match(id, uid), , drop=F]
+  # Duplicate eta for repeated outcome measurements
+  eta_dup <- eta[match(id, uid),,drop=F]
   if (is.null(colnames(eta_dup))) {
     colnames(eta_dup) <- paste0("e", 1:K)
   }
   eta_int <- eta_dup
   cnames <- colnames(eta_int)
   if (!is.null(Z_int)) {
+    if (is.null(colnames(Z_int))) {
+      colnames(Z_int) <- paste0("zint", 1:ncol(Z_int))
+    }
     for (h in 1:ncol(Z_int)) {
       for (k in 1:K) {
         eta_int <- cbind(eta_int, Z_int[,h]*eta_dup[,k])
@@ -17,12 +21,89 @@ get_eta_int <- function(eta, K, Z, Z_int, id) {
     }
   }
   if (!is.null(Z)) {
+    if (is.null(colnames(Z))) {
+      colnames(Z) <- paste0("z", 1:ncol(Z))
+    }
     eta_int <- cbind(eta_int, Z)
     cnames <- c(cnames, colnames(Z))
   }
   colnames(eta_int) <- cnames
   return(eta_int)
 }
+
+update_B_TPBN <- function(prm, Y, X, K, Z, Z_int, random_intercept) {
+  q <- ncol(Y)
+  n <- nrow(Y)
+  eta_int <- get_eta_int(prm$eta, K, Z, Z_int, prm$id)
+  p <- ncol(eta_int)
+  alpha <- update_intercept(Y - eta_int %*% prm$B - prm$eta_quad %*% prm$Omega, prm$Sigma)
+  # update_intercept_cpp(prm$alpha, prm$alpha_mu, prm$alpha_v,
+  #                      Y - eta_int %*% prm$B - prm$eta_quad %*% prm$Omega, 
+  #                      prm$id, prm$uid,
+  #                      prm$Sigma, prm$Sigmainv,
+  #                      v0 = 2.5, s0 = 0.084, 
+  #                      random_intercept = random_intercept, 
+  #                      n = length(prm$uid), N = nrow(Y), q = ncol(Y))
+  Ytilde <- Y - alpha - prm$eta_quad %*% prm$Omega
+  B <- update_B_TPBN_cpp(eta_int, Ytilde, prm$Sigma,
+                         prm$psi, p, q)
+  psi <- as.vector(update_psi_TPBN_cpp(B, prm$Sigmainv, prm$zeta, p, q))#rep(1, q)#
+  zeta <- update_zeta_TPBN_cpp(psi, p, global_shrink=1/(K*sqrt(n*log(n)))) #rep(1, q)#
+  
+  stopifnot(dim(B) == dim(prm$B))
+  stopifnot(sum(is.na(B)) == 0)
+  return(list(alpha = alpha,
+              B = B,
+              psi = psi,
+              zeta = zeta))
+}
+
+# Using a flat prior p(a) \prop 1
+update_intercept <- function(Y, Sigma) {
+  # use flat prior on alpha
+  alpha <- tcrossprod(rep(1, nrow(Y)),
+                      MASS::mvrnorm(1, 
+                                    mu = colMeans(Y, na.rm = TRUE), 
+                                    Sigma = Sigma / nrow(Y)))
+  return(alpha)
+}
+
+update_B_DL <- function(prm, Y, X, K, Z, Z_int) {
+  eta_int <- get_eta_int(prm$eta, K, Z, Z_int, prm$id)
+  n <- nrow(Y)
+  q <- ncol(Y)
+  p <- ncol(eta_int)
+  # update outcome-level intercepts
+  alpha <- update_intercept(Y - eta_int %*% prm$B - prm$eta_quad %*% prm$Omega, prm$Sigma)
+  Ytilde <- Y - alpha - prm$eta_quad %*% prm$Omega
+  # update regression coefficients
+  V <- prm$psi^2 * prm$zeta * tcrossprod(prm$nu^2, rep(1, q))
+  tryCatch(update_B_DL_cpp(prm$B, Ytilde, eta_int, prm$Sigmainv, V, n, q, p),
+           error = function(e) {
+             print(prm$nu)
+             print(prm$psi)
+             print(prm$zeta)
+             print(prm$B)
+             })
+  # update global-local shrinkage parameters
+  update_nu_DL_cpp(prm$nu, prm$B, prm$psi, prm$zeta, p, q)
+  update_psi_DL_cpp(prm$psi, prm$B, p, q)
+  update_zeta_DL_cpp(prm$zeta, prm$psi, prm$B, prm$nu)
+  return(prm)
+}
+
+# update_b0 <- function(B, Sigmainv, psi, tau0sq, q, p) {
+#   b0 <- rep(0, q)
+#   isi <- crossprod(rep(1, p), Sigmainv) %*% rep(1, p)
+#   is <- crossprod(rep(1, p), Sigmainv)
+#   for (i in range(q)) {
+#     vi <- 1/(isi/psi[i] + 1/tau0sq)
+#     mi <- vi * (is %*% B[i,]) /psi[i]
+#     b0[i] <- rnorm(1, mi, sqrt(vi))
+#   }
+#   
+#   return(b0)
+# }
 
 # Get matrix (K x K_int) indicating which columns in eta_int contain the kth factor
 get_k_I <- function(K_int, K, q_int) {
@@ -42,76 +123,6 @@ get_k_I <- function(K_int, K, q_int) {
   }
   return(k_I)
 }
-
-# TODO: pass u, a (v), tau (r) to RCpp funcntions
-update_B <- function(prm, Y, X, K, Z, Z_int, u, a, tau) {
-  q <- ncol(Y)
-  n <- nrow(Y)
-  eta_int <- get_eta_int(prm$eta, K, Z, Z_int, prm$id)
-  p <- ncol(eta_int)
-  B0 <- matrix(0, p, q)
-  
-  alpha <- update_intercept(Y - eta_int %*% prm$B, prm$Sigma)
-  Ytilde <- Y - tcrossprod(rep(1, n), alpha)
-  B <- update_B_TPBN(eta_int, Ytilde, prm$Sigma, B0, prm$psi, p, q)
-  # psi <- update_psi_IG(B, B0, prm$Sigmainv, q, p)
-  psi <- as.vector(update_psi(B, prm$Sigmainv, B0, prm$zeta, p, q))#rep(1, q)#
-  zeta <- update_zeta(psi, p, global_shrink=1/(K*sqrt(n*log(n)))) #rep(1, q)#
-  
-  #b0 <- rep(0, p)#update_b0_Horseshoe(eta_int, Ytilda, prm$Sigmainv, psi, prm$u0sq, prm$tau0sq, q, p, n)
-  #u0sq <- rep(1, p)#update_u0(b0, prm$c0, prm$tau0sq, q, p)
-  #c0 <- 1#tryCatch(update_c0(u0sq, q),
-                 #error=function(e) {print(u0sq)})
-  #tau0sq <- update_tau0(c0, prm$d0, q, p)
-  #d0 <- update_d0(tau0sq)
-  #tau0sq <- update_tau0_hCauchy(b0, prm$u0sq, prm$d0, q, p)
-  #d0 <- update_d0(tau0sq)
-  #b0 <- update_b0(B, prm$Sigmainv, psi, prm$tau0sq, q, p)
-  #tau0sq <- update_tau0_IG(b0, q, p)
-  
-  
-  # out <- update_zeta_nu_TPBN(Y, prm$B, prm$psi, prm$zeta, prm$Sigmainv, u, a, tau)
-  # psi <- out$nu
-  # zeta <- out$zeta
-  # 
-  # B <- core_B_TPBN(Y, eta_int, psi, zeta, prm$Sigma)
-  # rownames(B) <- colnames(eta_int)
-
-  stopifnot(dim(B) == dim(prm$B))
-  stopifnot(sum(is.na(B)) == 0)
-  
-  prm[["alpha"]] <- alpha
-  prm[["B"]] <- B
-  prm[["psi"]] <- psi
-  prm[["zeta"]] <- zeta
-  # prm[["b0"]] <- b0
-  # prm[["u0sq"]] <- u0sq
-  # prm[["c0"]] <- c0
-  #prm[["tau0sq"]] <- tau0sq
-  #prm[["d0"]] <- d0
-  
-  return(prm)
-}
-
-# Using a flat prior p(a) \prop 1
-update_intercept <- function(Y, Sigma) {
-  a <- MASS::mvrnorm(1, mu = colMeans(Y, na.rm = TRUE), Sigma = Sigma / nrow(Y))
-  return(a)
-}
-
-
-# update_b0 <- function(B, Sigmainv, psi, tau0sq, q, p) {
-#   b0 <- rep(0, q)
-#   isi <- crossprod(rep(1, p), Sigmainv) %*% rep(1, p)
-#   is <- crossprod(rep(1, p), Sigmainv)
-#   for (i in range(q)) {
-#     vi <- 1/(isi/psi[i] + 1/tau0sq)
-#     mi <- vi * (is %*% B[i,]) /psi[i]
-#     b0[i] <- rnorm(1, mi, sqrt(vi))
-#   }
-#   
-#   return(b0)
-# }
 
 update_u0 <- function(b0, c0, tau0_sq, q, p) {
   u0_sq <- rep(0, q)

@@ -33,12 +33,8 @@ update_B_TPBN_cpp <- function(X, Y, Sigma, psi, p, q) {
     .Call(`_famr_update_B_TPBN_cpp`, X, Y, Sigma, psi, p, q)
 }
 
-update_eta_mh_cpp <- function(eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z, Z_int, uid, id, K, p, t, n, q, q_int, n_accepted, eps, A, b, s, adaptiveM = TRUE, adaptiveMWG = FALSE) {
-    invisible(.Call(`_famr_update_eta_mh_cpp`, eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z, Z_int, uid, id, K, p, t, n, q, q_int, n_accepted, eps, A, b, s, adaptiveM, adaptiveMWG))
-}
-
-update_eta_gibbs_cpp <- function(eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, uid, Z, Z_int, K, p, t, n, q, q_int) {
-    invisible(.Call(`_famr_update_eta_gibbs_cpp`, eta, B, Theta, Sigmay_inv, sigmax_sqinv, Y, X, uid, Z, Z_int, K, p, t, n, q, q_int))
+update_eta_mh_cpp <- function(eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, K, p, t, n, q_int, n_accepted, eps, A, b, s, adaptiveM = TRUE, adaptiveMWG = FALSE) {
+    invisible(.Call(`_famr_update_eta_mh_cpp`, eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, K, p, t, n, q_int, n_accepted, eps, A, b, s, adaptiveM, adaptiveMWG))
 }
 
 rgig_cpp <- function(lam, psi, chi) {
@@ -69,16 +65,28 @@ update_Omega_TPBN_cpp <- function(Omega, X, Y, Sigma, psi) {
     .Call(`_famr_update_Omega_TPBN_cpp`, Omega, X, Y, Sigma, psi)
 }
 
+update_Omega_psi_mh_cpp <- function(psir, psic, eps, n_accepted, Omega, Sigma_inv, zetar, zetac, q, u, K, s) {
+    invisible(.Call(`_famr_update_Omega_psi_mh_cpp`, psir, psic, eps, n_accepted, Omega, Sigma_inv, zetar, zetac, q, u, K, s))
+}
+
 is_finite_rows <- function(A) {
     .Call(`_famr_is_finite_rows`, A)
 }
 
-update_Omega_psi_cpp <- function(psi, Omega, Sigmainv, psi2, zeta, K, q) {
-    invisible(.Call(`_famr_update_Omega_psi_cpp`, psi, Omega, Sigmainv, psi2, zeta, K, q))
+update_Omega_psi_cpp_depricated <- function(psi, Omega, Sigmainv, psi2, zeta, K, q) {
+    invisible(.Call(`_famr_update_Omega_psi_cpp_depricated`, psi, Omega, Sigmainv, psi2, zeta, K, q))
+}
+
+update_Omega_psi_cpp <- function(psir, psic, Omega, Sigmainv, zetar, zetac, K, q) {
+    invisible(.Call(`_famr_update_Omega_psi_cpp`, psir, psic, Omega, Sigmainv, zetar, zetac, K, q))
 }
 
 update_Omega_zeta_cpp <- function(zeta, psi, K, global_shrink = 1) {
     invisible(.Call(`_famr_update_Omega_zeta_cpp`, zeta, psi, K, global_shrink))
+}
+
+predict_interactions_cpp <- function(Y, X, Omega, n, q) {
+    invisible(.Call(`_famr_predict_interactions_cpp`, Y, X, Omega, n, q))
 }
 
 update_Theta_MGP_cpp <- function(eta, sigmax_sqinv, phi, delta, tau, K, p, X) {

@@ -21,40 +21,39 @@ arma::mat update_Omega_TPBN_cpp(const arma::mat& Omega, const arma::mat& X,
 }
 
 //[[Rcpp::export]]
-arma::uvec is_finite_rows(const arma::mat& A) {
-// returns a vector of indices of rows with at least one nonfinite (NA, inf) element
-  arma::uvec res(A.n_rows, fill::zeros);
-  for (unsigned int i = 0; i < A.n_rows; i++) {
-    if (A.row(i).is_finite()) {
-      res(i) = 1;
-    }
-  }
-  return res;
-}
-
-//[[Rcpp::export]]
-void update_Omega_psi_cpp(arma::vec& psi, const arma::cube& Omega, 
-                          const arma::mat& Sigmainv, const arma::vec& psi2, 
-                          const arma::vec& zeta, int K, int q) {
+void update_Omega_psi_cpp(arma::vec& psir, arma::vec& psic, 
+                          const arma::cube& Omega, const arma::mat& Sigmainv, 
+                          const arma::vec& zetar, const arma::vec& zetac, 
+                          int K, int q) {
   arma::mat O;
   arma::vec s;
-  arma::uvec finite(K);
-  double lam = 0.5 - 0.5 * K * q; // parameter for the conditional
-  for (int i = 0; i < K; i++) {
-    // get matrix Omega[i,,]
-    O = Omega.row(i); // K x q matrix
-    if (q == 1 && K > 1) { // in this case, Omega.row(i) returns a 1xK row vector
-      O = arma::mat(O.t()); // turn into K x 1 matrix
-    }
-    // remove rows with only NAs
-    finite = is_finite_rows(O);
-    O.shed_rows(find(finite == 0)); // TODO find rows with only NA values
-    s = psi2.elem(find(finite == 1));
+  arma::vec o;
+  // update row-wise variances
+  for (int r = 0; r < K; r++) {
     // parameters for the conditional
-    double rgig_psi = 2 * zeta(i);
-    double chi = arma::trace(Sigmainv * O.t() * (O.each_col() / s));
+    double lam = 0.5 - 0.5 * q * (r + 1); // parameter for the conditional, u=0.5
+    double rgig_psi = 2 * zetar(r);
+    double chi = 0;
+    for (int c = 0; c <= r; c++) {
+      o = Omega.slice(c).col(r); // Omega is (q x K rows x K cols)
+      chi += arma::as_scalar((o.t() * Sigmainv * o) / psic(c));
+    }
     // sample new psi(i)
-    psi(i) = std::max(rgig_cpp(lam, rgig_psi, chi), datum::eps);
+    psir(r) = std::max(rgig_cpp(lam, rgig_psi, chi), datum::eps);
+  }
+  
+  // update column-wise variances
+  for (int c = 0; c < K; c++) {
+    // parameters for the conditional
+    double chi = 0;
+    for (int r = c; r < K; r++) {
+      o = Omega.slice(c).col(r); // Omega is (q x K rows x K cols) = (row x col x slice)
+      chi += arma::as_scalar((o.t() * Sigmainv * o) / psir(r));
+    }
+    double lam = 0.5 - 0.5 * q * (K - c); // parameter for the conditional, u=0.5
+    double rgig_psi = 2 * zetac(c);
+    // sample new psi(i)
+    psic(c) = std::max(rgig_cpp(lam, rgig_psi, chi), datum::eps);
   }
 }
 
@@ -65,5 +64,17 @@ void update_Omega_zeta_cpp(arma::vec& zeta, const arma::vec& psi,
   for (int i = 0; i < K; i++) {
     double rate = psi(i) + global_shrink;
     zeta(i) = arma::randg<double>(arma::distr_param(v, 1/rate));
+  }
+}
+
+// [[Rcpp::export]]
+void predict_interactions_cpp(arma::mat& Y, const arma::mat& X, 
+                              const arma::cube& Omega, int n, int q) {
+  arma::rowvec b(q);
+  for (int i=0; i<n; i++) {
+    for (int j=0; j<q; j++) {
+      b(j) = arma::as_scalar(X.row(i) * Omega.slice(j) * X.row(i).t());
+    }
+    Y.row(i) += b;
   }
 }

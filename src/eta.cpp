@@ -6,8 +6,6 @@
 using namespace std;
 using namespace arma;
 
-// TO DO: ADD OMEGA TENSOR
-
 // a (t, K) matrix B^T + \sum_l z_{il}C^T_l
 void get_Aij(arma::mat& Aij, const arma::mat& B, int K, int t, int q_int = 0, 
              const arma::rowvec& z_int = zeros<arma::rowvec>(0)) {
@@ -25,8 +23,8 @@ void get_Si_mi(arma::mat& Si, arma::mat& Ri, arma::vec& mi, arma::vec& ti,
                const arma::mat& B, const arma::mat& Theta,
                const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv,
                const arma::mat& Y, const arma::rowvec& xi, 
-               const arma::mat& Z, const arma::mat& Z_int,
-               const arma::uvec& idi, int t, int K, int q, int q_int) {
+               const arma::mat& Z_int, const arma::uvec& idi, 
+               int t, int K, int q_int) {
   arma::mat Aij(K, t);
   arma::rowvec yij(t);
   arma::mat Theta_sigmax = Theta.each_col() % sigmax_sqinv;
@@ -39,10 +37,6 @@ void get_Si_mi(arma::mat& Si, arma::mat& Ri, arma::vec& mi, arma::vec& ti,
       get_Aij(Aij, B, K, t);
     }
     yij = Y.row(idi(j));
-    // outcome minus effect of covariates
-    if (q > 0) {
-      yij -= Z.row(idi(j)) * B.submat(B.n_rows - q, 0, B.n_rows - 1, t - 1);
-    }
     // contribution of Y to likelihood
     Si += Aij * Sigmay_inv * Aij.t();
     Ri += Aij.t();
@@ -77,14 +71,14 @@ double llike(const arma::rowvec& etai,
              const arma::mat& B, const arma::mat& Theta, const arma::cube& Omega,
              const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv,
              const arma::mat& Y, const arma::rowvec& xi, 
-             const arma::mat& Z, const arma::mat& Z_int,
-             const arma::uvec& idi, int t, int K, int q, int q_int) {
+             const arma::mat& Z_int, const arma::uvec& idi, 
+             int t, int K, int q_int) {
   arma::mat Si(K, K, fill::zeros);
   arma::mat Ri(t, K, fill::zeros);
   arma::vec mi(K, fill::zeros);
   arma::vec ti(t, fill::zeros);
   get_Si_mi(Si, Ri, mi, ti, B, Theta, Sigmay_inv, sigmax_sqinv,
-            Y, xi, Z, Z_int, idi, t, K, q, q_int);
+            Y, xi, Z_int, idi, t, K, q_int);
   arma::vec Oi = get_Omega_tilde(Omega, etai, t);
   arma::rowvec OS = Oi.t()*Sigmay_inv;
   return as_scalar(-0.5*etai*Si*etai.t() + etai*mi + 
@@ -92,15 +86,15 @@ double llike(const arma::rowvec& etai,
 }
 
 // [[Rcpp::export]]
-void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Theta, 
+void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Theta,
                        const arma::cube& Omega,
                        const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv,
-                       const arma::mat& Y, const arma::mat& X, 
-                       const arma::mat& Z, const arma::mat& Z_int,
+                       const arma::mat& Y, const arma::mat& X,
+                       const arma::mat& Z_int,
                        const arma::vec& uid, const arma::vec& id,
-                       int K, int p, int t, int n, int q, int q_int, 
+                       int K, int p, int t, int n, int q_int,
                        arma::vec& n_accepted, arma::vec& eps,
-                       arma::cube& A, arma::mat& b, int s, 
+                       arma::cube& A, arma::mat& b, int s,
                        bool adaptiveM = true, bool adaptiveMWG = false
                        ) {
   arma::rowvec prop(K);
@@ -134,45 +128,15 @@ void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Thet
     }
     // log likelihood of the proposal
     llike_prop = llike(prop, B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
-                       Y, X.row(i), Z, Z_int, idi, t, K, q, q_int);
+                       Y, X.row(i), Z_int, idi, t, K, q_int);
     // log likelihood of the current state
     llike_cur = llike(eta.row(i), B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
-                      Y, X.row(i), Z, Z_int, idi, t, K, q, q_int);
+                      Y, X.row(i), Z_int, idi, t, K, q_int);
     // log acceptance probability
     logr = llike_prop + lprior(prop) - llike_cur - lprior(eta.row(i));
     if (log(randu<double>()) < logr) {
       eta.row(i) = prop;
       n_accepted(i) += 1;
     }
-  }
-}
-
-// Gibbs sampler for eta
-// Assuming no interaction between factors
-
-// [[Rcpp::export]]
-void update_eta_gibbs_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Theta, 
-                          const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv,
-                          const arma::mat& Y, const arma::mat& X, const arma::vec& uid, 
-                          const arma::mat& Z, const arma::mat& Z_int,
-                          int K, int p, int t,
-                          int n, int q, int q_int) {
-  arma::mat Si(K, K);
-  arma::mat Ri(t, K);
-  arma::vec mi(K);
-  arma::vec ti(t);
-  arma::uvec idi;
-  arma::mat L(K, K);
-  for (int i = 0; i < n; i++) {
-    // idi of all observations of subject i
-    idi = find(uid == i);
-    // get posterior mean and variance
-    get_Si_mi(Si, Ri, mi, ti, B, Theta, Sigmay_inv, sigmax_sqinv,
-              Y, X.row(i), Z, Z_int, idi, t, K, q, q_int);
-    // add contribution from the prior
-    Si += eye(K, K);
-    // use Cholesky decomposition for efficiency
-    L = trimatl(chol(Si, "lower"));
-    eta.row(i) = solve(L, randn<vec>(K)).t() + solve(trimatu(L.t()), solve(L, mi)).t();
   }
 }

@@ -23,8 +23,7 @@ update_Omega <- function(prm, Y, X, K, Z, Z_int, O3, O3_is_col_na) {
   Omega_psic <- prm$Omega_psic
   Omega_zetac <- prm$Omega_zetac
   # Get residuals of the main effects
-  eta_int <- get_eta_int(prm$eta, K, Z, Z_int, prm$id)
-  Ytilde <- Y - eta_int %*% prm$B - prm$alpha
+  Ytilde <- Y - prm$eta_int %*% prm$B - prm$alpha
   # Get pairwise interaction regressor
   eta_quad <- get_eta_quad(prm$eta, prm$id, K)
   # Diagonals of O3 column variance
@@ -38,15 +37,11 @@ update_Omega <- function(prm, Y, X, K, Z, Z_int, O3, O3_is_col_na) {
   # Fold O3 into 3-tensor Omega
   Omega_tensor <- rTensor::k_fold(O3, m = 1, modes = c(q, K, K))
   
-  # Update 1-mode variances
-  Omega_tensor_row <- aperm(Omega_tensor@data, c(2, 3, 1))
-  update_Omega_psi_cpp(Omega_psir, Omega_tensor_row, prm$Sigmainv, 
-                       Omega_psic, Omega_zetar, K, q)
+  # Update variances
+  update_Omega_psi_cpp(Omega_psir, Omega_psic,
+                       Omega_tensor@data, prm$Sigmainv, 
+                       Omega_zetar, Omega_zetac, K, q)
   update_Omega_zeta_cpp(Omega_zetar, Omega_psir, K)
-  # Update 2-mode variances
-  Omega_tensor_col <- aperm(Omega_tensor@data, c(3, 2, 1))
-  update_Omega_psi_cpp(Omega_psic, Omega_tensor_col, prm$Sigmainv, 
-                       Omega_psir, Omega_zetac, K, q)
   update_Omega_zeta_cpp(Omega_zetac, Omega_psic, K)
   Omega_psi <- unlist(sapply(1:K, function(k) Omega_psir[k:K] * Omega_psic[k]))
   return(list(eta_quad = eta_quad,

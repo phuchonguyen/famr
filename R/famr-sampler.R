@@ -245,9 +245,15 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         # zero out NAs
         prm[["Omega_tensor"]]@data[is.na(prm$Omega_tensor@data)] <- 0
         # k-mode tensor multiplication to transform this into coefs in X
-        sims[["Omega_array_x"]][s-nwarmup,,,] <- rTensor::ttl(prm$Omega_tensor,
-                                                               list(t(Ax), t(Ax)),
-                                                               c(2, 3))@data
+        tmp_Omega <- rTensor::ttl(prm[["Omega_tensor"]], 
+                                  list(t(Ax), t(Ax)), 
+                                  c(2, 3))@data
+        sims[["Omega_array_x"]][s-nwarmup,,,] <- abind::abind(
+          apply(tmp_Omega,
+                1,
+                function(x) (x+t(x))/2,
+                simplify = F),
+          along = -1)
       }
       #sims[["b0x"]][s-nwarmup, ] <- Ax %*% prm$b0[1:K]
       

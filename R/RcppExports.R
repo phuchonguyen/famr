@@ -65,18 +65,6 @@ update_Omega_TPBN_cpp <- function(Omega, X, Y, Sigma, psi) {
     .Call(`_famr_update_Omega_TPBN_cpp`, Omega, X, Y, Sigma, psi)
 }
 
-update_Omega_psi_mh_cpp <- function(psir, psic, eps, n_accepted, Omega, Sigma_inv, zetar, zetac, q, u, K, s) {
-    invisible(.Call(`_famr_update_Omega_psi_mh_cpp`, psir, psic, eps, n_accepted, Omega, Sigma_inv, zetar, zetac, q, u, K, s))
-}
-
-is_finite_rows <- function(A) {
-    .Call(`_famr_is_finite_rows`, A)
-}
-
-update_Omega_psi_cpp_depricated <- function(psi, Omega, Sigmainv, psi2, zeta, K, q) {
-    invisible(.Call(`_famr_update_Omega_psi_cpp_depricated`, psi, Omega, Sigmainv, psi2, zeta, K, q))
-}
-
 update_Omega_psi_cpp <- function(psir, psic, Omega, Sigmainv, zetar, zetac, K, q) {
     invisible(.Call(`_famr_update_Omega_psi_cpp`, psir, psic, Omega, Sigmainv, zetar, zetac, K, q))
 }

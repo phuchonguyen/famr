@@ -271,54 +271,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// update_Omega_psi_mh_cpp
-void update_Omega_psi_mh_cpp(arma::vec& psir, arma::vec& psic, arma::mat& eps, arma::mat& n_accepted, const arma::cube& Omega, const arma::mat& Sigma_inv, const arma::vec& zetar, const arma::vec& zetac, int q, double u, int K, int s);
-RcppExport SEXP _famr_update_Omega_psi_mh_cpp(SEXP psirSEXP, SEXP psicSEXP, SEXP epsSEXP, SEXP n_acceptedSEXP, SEXP OmegaSEXP, SEXP Sigma_invSEXP, SEXP zetarSEXP, SEXP zetacSEXP, SEXP qSEXP, SEXP uSEXP, SEXP KSEXP, SEXP sSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::vec& >::type psir(psirSEXP);
-    Rcpp::traits::input_parameter< arma::vec& >::type psic(psicSEXP);
-    Rcpp::traits::input_parameter< arma::mat& >::type eps(epsSEXP);
-    Rcpp::traits::input_parameter< arma::mat& >::type n_accepted(n_acceptedSEXP);
-    Rcpp::traits::input_parameter< const arma::cube& >::type Omega(OmegaSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type Sigma_inv(Sigma_invSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type zetar(zetarSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type zetac(zetacSEXP);
-    Rcpp::traits::input_parameter< int >::type q(qSEXP);
-    Rcpp::traits::input_parameter< double >::type u(uSEXP);
-    Rcpp::traits::input_parameter< int >::type K(KSEXP);
-    Rcpp::traits::input_parameter< int >::type s(sSEXP);
-    update_Omega_psi_mh_cpp(psir, psic, eps, n_accepted, Omega, Sigma_inv, zetar, zetac, q, u, K, s);
-    return R_NilValue;
-END_RCPP
-}
-// is_finite_rows
-arma::uvec is_finite_rows(const arma::mat& A);
-RcppExport SEXP _famr_is_finite_rows(SEXP ASEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type A(ASEXP);
-    rcpp_result_gen = Rcpp::wrap(is_finite_rows(A));
-    return rcpp_result_gen;
-END_RCPP
-}
-// update_Omega_psi_cpp_depricated
-void update_Omega_psi_cpp_depricated(arma::vec& psi, const arma::cube& Omega, const arma::mat& Sigmainv, const arma::vec& psi2, const arma::vec& zeta, int K, int q);
-RcppExport SEXP _famr_update_Omega_psi_cpp_depricated(SEXP psiSEXP, SEXP OmegaSEXP, SEXP SigmainvSEXP, SEXP psi2SEXP, SEXP zetaSEXP, SEXP KSEXP, SEXP qSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::vec& >::type psi(psiSEXP);
-    Rcpp::traits::input_parameter< const arma::cube& >::type Omega(OmegaSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type Sigmainv(SigmainvSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type psi2(psi2SEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type zeta(zetaSEXP);
-    Rcpp::traits::input_parameter< int >::type K(KSEXP);
-    Rcpp::traits::input_parameter< int >::type q(qSEXP);
-    update_Omega_psi_cpp_depricated(psi, Omega, Sigmainv, psi2, zeta, K, q);
-    return R_NilValue;
-END_RCPP
-}
 // update_Omega_psi_cpp
 void update_Omega_psi_cpp(arma::vec& psir, arma::vec& psic, const arma::cube& Omega, const arma::mat& Sigmainv, const arma::vec& zetar, const arma::vec& zetac, int K, int q);
 RcppExport SEXP _famr_update_Omega_psi_cpp(SEXP psirSEXP, SEXP psicSEXP, SEXP OmegaSEXP, SEXP SigmainvSEXP, SEXP zetarSEXP, SEXP zetacSEXP, SEXP KSEXP, SEXP qSEXP) {
@@ -489,9 +441,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_famr_impute_Ymis_cpp", (DL_FUNC) &_famr_impute_Ymis_cpp, 6},
     {"_famr_impute_Yprobit_cpp", (DL_FUNC) &_famr_impute_Yprobit_cpp, 7},
     {"_famr_update_Omega_TPBN_cpp", (DL_FUNC) &_famr_update_Omega_TPBN_cpp, 5},
-    {"_famr_update_Omega_psi_mh_cpp", (DL_FUNC) &_famr_update_Omega_psi_mh_cpp, 12},
-    {"_famr_is_finite_rows", (DL_FUNC) &_famr_is_finite_rows, 1},
-    {"_famr_update_Omega_psi_cpp_depricated", (DL_FUNC) &_famr_update_Omega_psi_cpp_depricated, 7},
     {"_famr_update_Omega_psi_cpp", (DL_FUNC) &_famr_update_Omega_psi_cpp, 8},
     {"_famr_update_Omega_zeta_cpp", (DL_FUNC) &_famr_update_Omega_zeta_cpp, 4},
     {"_famr_predict_interactions_cpp", (DL_FUNC) &_famr_predict_interactions_cpp, 5},

@@ -89,29 +89,3 @@ update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, binary) {
   stopifnot(sigmay_sqinv > .Machine$double.eps)
   return(list(Sigma = Sigma, Sigmainv = Sigmainv, sigmay_sqinv = sigmay_sqinv))
 }
-
-# For outcome specific latent factor
-update_sigmay_sqinv <- function(prm, Y, s0=0.084, r=2.5) {
-  q <- ncol(Y)
-  n <- nrow(Y)
-  # prior 1/sigma^2 ~ Ga(r/2, rs0/2)
-  # since data has been standardized to have variance 1, default choice of r, s0 s.t. Pr(sigma^2 <= 1) = 0.95
-  # the choices below from gpreg lecture by Surya to produce Pr(sigma <= 1/3) = 0.5
-  sigmay_sqinv <- rep(NA, q)
-  alpha <- (n + r)*0.5
-  Ytilde <- Y -
-    tcrossprod(rep(1, n), prm$alpha) -
-    prm$eta_int %*% prm$B -
-    prm$eta_quad %*% prm$Omega
-  for (j in 1:q) {
-    SSRj <- sum(Ytilde[,j]^2)
-    betaj <- 0.5*(r*s0 + SSRj)
-    sigmay_sqinv[j] <- rgamma(1, shape=alpha, rate=betaj)
-    stopifnot(sigmay_sqinv[j] > .Machine$double.eps)
-  }
-  return(list(sigmay_sqinv = sigmay_sqinv,
-              Sigma = diag(1/sigmay_sqinv, q, q),
-              Sigmainv = diag(sigmay_sqinv, q, q)))
-}
-
-

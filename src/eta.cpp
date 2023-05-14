@@ -53,8 +53,8 @@ void get_Si_mi(arma::mat& Si, arma::mat& Ri, arma::vec& mi, arma::vec& ti,
 
 // log prior of latent factors for one subject i
 // eta_i \sim N(0, I_K)
-double lprior(const arma::rowvec etai) {
-  return as_scalar(-0.5*etai*etai.t());
+double lprior(const arma::rowvec etai, int K) {
+  return as_scalar(-0.5*log(2*M_PI)*K -0.5*log(K) -0.5*etai*etai.t());
 }
 
 // (q x K x K) Omega mode-2 eta_i^T mode-3 eta_i^T
@@ -72,7 +72,7 @@ double llike(const arma::rowvec& etai,
              const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv,
              const arma::mat& Y, const arma::rowvec& xi, 
              const arma::mat& Z_int, const arma::uvec& idi, 
-             int t, int K, int q_int) {
+             int t, int K, int q_int, int p) {
   arma::mat Si(K, K, fill::zeros);
   arma::mat Ri(t, K, fill::zeros);
   arma::vec mi(K, fill::zeros);
@@ -81,7 +81,10 @@ double llike(const arma::rowvec& etai,
             Y, xi, Z_int, idi, t, K, q_int);
   arma::vec Oi = get_Omega_tilde(Omega, etai, t);
   arma::rowvec OS = Oi.t()*Sigmay_inv;
-  return as_scalar(-0.5*etai*Si*etai.t() + etai*mi + 
+  return as_scalar(-0.5*log(2*M_PI)*(t*idi.n_elem + p) + 
+                   0.5*log(sum(sigmax_sqinv)) + 
+                   idi.n_elem*0.5*log(det(Sigmay_inv)) +
+                   -0.5*etai*Si*etai.t() + etai*mi +
                    OS*ti - OS*Ri*etai.t() - 0.5*OS*Oi);
 }
 
@@ -94,8 +97,10 @@ void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Thet
                        const arma::vec& uid, const arma::vec& id,
                        int K, int p, int t, int n, int q_int,
                        arma::vec& n_accepted, arma::vec& eps,
-                       arma::cube& A, arma::mat& b, int s,
-                       bool adaptiveM = true, bool adaptiveMWG = false
+                       arma::cube& A, arma::mat& b, 
+                       arma::vec& lpmf, int s,
+                       bool adaptiveM = true, bool adaptiveMWG = false,
+                       int batch_size = 50
                        ) {
   arma::rowvec prop(K);
   double logr;
@@ -116,27 +121,36 @@ void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Thet
         (1e-10 * eye(K, K));
       prop = eta.row(i) + arma::mvnrnd(M, C).t();
     } else if (adaptiveMWG) {
-      if (s % 50 == 0) { // update scaling parameter every 50 iterations
-        double d = min(0.01, std::pow((int)s/50, -0.5));
-        if (n_accepted(i) / s > 0.44) {eps(i) += d;} // 0.44 is theoretically optimal acceptance rate
-        else {eps(i) -= d;}
+      // update scaling parameter every 50 iterations
+      if ((s-1) % batch_size == 0) {
+        double d = min(0.05, std::pow((int)s/batch_size, -0.5));
+        // 0.44 is theoretically optimal acceptance rate for the latest 50 interations
+        if ((n_accepted(i) / batch_size) > 0.44) {
+          eps(i) += d;
+        } else {
+          eps(i) -= d;
+        }
+        // reset acceptances counter
+        n_accepted(i) = 0;
       }
       prop = eta.row(i) + std::exp(2*eps(i)) * randn<rowvec>(K);
     } else {
       // Random walk proposal with scaling parameter eps
-      prop = eta.row(i) + eps(i) * randn<rowvec>(K);
+      prop = eta.row(i) + std::exp(2*eps(i)) * randn<rowvec>(K);
     }
     // log likelihood of the proposal
     llike_prop = llike(prop, B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
-                       Y, X.row(i), Z_int, idi, t, K, q_int);
+                       Y, X.row(i), Z_int, idi, t, K, q_int, p);
     // log likelihood of the current state
-    llike_cur = llike(eta.row(i), B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
-                      Y, X.row(i), Z_int, idi, t, K, q_int);
+    // llike_cur = llike(eta.row(i), B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
+    //                   Y, X.row(i), Z_int, idi, t, K, q_int, p);
+    llike_cur = lpmf(i);
     // log acceptance probability
-    logr = llike_prop + lprior(prop) - llike_cur - lprior(eta.row(i));
+    logr = llike_prop + lprior(prop, K) - llike_cur - lprior(eta.row(i), K);
     if (log(randu<double>()) < logr) {
       eta.row(i) = prop;
       n_accepted(i) += 1;
+      lpmf(i) = llike_prop;
     }
   }
 }

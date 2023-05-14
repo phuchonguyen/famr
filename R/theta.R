@@ -4,7 +4,7 @@
 #' @param Y n x t matrix of responses
 #' @param X n x p matrix of correlated covariates
 #' @param K number of latent factor
-update_Theta_MGP <- function(prm, Y, X, K) {
+update_Theta_MGP <- function(prm, X, K) {
   Theta <- update_Theta_MGP_cpp(prm$eta, prm$sigmax_sqinv, 
                                 prm$phi, prm$delta, cumprod(prm$delta), 
                                 K, ncol(X), X)

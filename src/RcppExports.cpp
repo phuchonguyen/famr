@@ -137,8 +137,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // update_eta_mh_cpp
-void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Theta, const arma::cube& Omega, const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv, const arma::mat& Y, const arma::mat& X, const arma::mat& Z_int, const arma::vec& uid, const arma::vec& id, int K, int p, int t, int n, int q_int, arma::vec& n_accepted, arma::vec& eps, arma::cube& A, arma::mat& b, int s, bool adaptiveM, bool adaptiveMWG);
-RcppExport SEXP _famr_update_eta_mh_cpp(SEXP etaSEXP, SEXP BSEXP, SEXP ThetaSEXP, SEXP OmegaSEXP, SEXP Sigmay_invSEXP, SEXP sigmax_sqinvSEXP, SEXP YSEXP, SEXP XSEXP, SEXP Z_intSEXP, SEXP uidSEXP, SEXP idSEXP, SEXP KSEXP, SEXP pSEXP, SEXP tSEXP, SEXP nSEXP, SEXP q_intSEXP, SEXP n_acceptedSEXP, SEXP epsSEXP, SEXP ASEXP, SEXP bSEXP, SEXP sSEXP, SEXP adaptiveMSEXP, SEXP adaptiveMWGSEXP) {
+void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Theta, const arma::cube& Omega, const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv, const arma::mat& Y, const arma::mat& X, const arma::mat& Z_int, const arma::vec& uid, const arma::vec& id, int K, int p, int t, int n, int q_int, arma::vec& n_accepted, arma::vec& eps, arma::cube& A, arma::mat& b, arma::vec& lpmf, int s, bool adaptiveM, bool adaptiveMWG, int batch_size);
+RcppExport SEXP _famr_update_eta_mh_cpp(SEXP etaSEXP, SEXP BSEXP, SEXP ThetaSEXP, SEXP OmegaSEXP, SEXP Sigmay_invSEXP, SEXP sigmax_sqinvSEXP, SEXP YSEXP, SEXP XSEXP, SEXP Z_intSEXP, SEXP uidSEXP, SEXP idSEXP, SEXP KSEXP, SEXP pSEXP, SEXP tSEXP, SEXP nSEXP, SEXP q_intSEXP, SEXP n_acceptedSEXP, SEXP epsSEXP, SEXP ASEXP, SEXP bSEXP, SEXP lpmfSEXP, SEXP sSEXP, SEXP adaptiveMSEXP, SEXP adaptiveMWGSEXP, SEXP batch_sizeSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< arma::mat& >::type eta(etaSEXP);
@@ -161,10 +161,12 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::vec& >::type eps(epsSEXP);
     Rcpp::traits::input_parameter< arma::cube& >::type A(ASEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type b(bSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type lpmf(lpmfSEXP);
     Rcpp::traits::input_parameter< int >::type s(sSEXP);
     Rcpp::traits::input_parameter< bool >::type adaptiveM(adaptiveMSEXP);
     Rcpp::traits::input_parameter< bool >::type adaptiveMWG(adaptiveMWGSEXP);
-    update_eta_mh_cpp(eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, K, p, t, n, q_int, n_accepted, eps, A, b, s, adaptiveM, adaptiveMWG);
+    Rcpp::traits::input_parameter< int >::type batch_size(batch_sizeSEXP);
+    update_eta_mh_cpp(eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, K, p, t, n, q_int, n_accepted, eps, A, b, lpmf, s, adaptiveM, adaptiveMWG, batch_size);
     return R_NilValue;
 END_RCPP
 }
@@ -423,6 +425,50 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// update_random_intercept_cpp
+void update_random_intercept_cpp(arma::mat& xi, const arma::mat& Y, const arma::vec& id, const arma::vec& uid, const arma::mat& Sigma, const double sigmay_sqinv, const double nu_sqinv, int q, int n);
+RcppExport SEXP _famr_update_random_intercept_cpp(SEXP xiSEXP, SEXP YSEXP, SEXP idSEXP, SEXP uidSEXP, SEXP SigmaSEXP, SEXP sigmay_sqinvSEXP, SEXP nu_sqinvSEXP, SEXP qSEXP, SEXP nSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat& >::type xi(xiSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type id(idSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type uid(uidSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Sigma(SigmaSEXP);
+    Rcpp::traits::input_parameter< const double >::type sigmay_sqinv(sigmay_sqinvSEXP);
+    Rcpp::traits::input_parameter< const double >::type nu_sqinv(nu_sqinvSEXP);
+    Rcpp::traits::input_parameter< int >::type q(qSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    update_random_intercept_cpp(xi, Y, id, uid, Sigma, sigmay_sqinv, nu_sqinv, q, n);
+    return R_NilValue;
+END_RCPP
+}
+// update_xi_mh_cpp
+void update_xi_mh_cpp(arma::mat& xi, arma::cube& A, arma::mat& b, arma::vec& n_accepted, arma::vec& eps, arma::vec& lpmf, const arma::mat& Y, const arma::mat& W, const arma::mat& Sigma_inv, const arma::vec& uid, const arma::vec& id, int H, int n, int s, bool adaptiveM, bool adaptiveMWG, int batch_size);
+RcppExport SEXP _famr_update_xi_mh_cpp(SEXP xiSEXP, SEXP ASEXP, SEXP bSEXP, SEXP n_acceptedSEXP, SEXP epsSEXP, SEXP lpmfSEXP, SEXP YSEXP, SEXP WSEXP, SEXP Sigma_invSEXP, SEXP uidSEXP, SEXP idSEXP, SEXP HSEXP, SEXP nSEXP, SEXP sSEXP, SEXP adaptiveMSEXP, SEXP adaptiveMWGSEXP, SEXP batch_sizeSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat& >::type xi(xiSEXP);
+    Rcpp::traits::input_parameter< arma::cube& >::type A(ASEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type b(bSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type n_accepted(n_acceptedSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type eps(epsSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type lpmf(lpmfSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type W(WSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Sigma_inv(Sigma_invSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type uid(uidSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type id(idSEXP);
+    Rcpp::traits::input_parameter< int >::type H(HSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type s(sSEXP);
+    Rcpp::traits::input_parameter< bool >::type adaptiveM(adaptiveMSEXP);
+    Rcpp::traits::input_parameter< bool >::type adaptiveMWG(adaptiveMWGSEXP);
+    Rcpp::traits::input_parameter< int >::type batch_size(batch_sizeSEXP);
+    update_xi_mh_cpp(xi, A, b, n_accepted, eps, lpmf, Y, W, Sigma_inv, uid, id, H, n, s, adaptiveM, adaptiveMWG, batch_size);
+    return R_NilValue;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_famr_update_intercept_cpp", (DL_FUNC) &_famr_update_intercept_cpp, 14},
@@ -433,7 +479,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_famr_update_zeta_TPBN_cpp", (DL_FUNC) &_famr_update_zeta_TPBN_cpp, 3},
     {"_famr_update_psi_TPBN_cpp", (DL_FUNC) &_famr_update_psi_TPBN_cpp, 5},
     {"_famr_update_B_TPBN_cpp", (DL_FUNC) &_famr_update_B_TPBN_cpp, 6},
-    {"_famr_update_eta_mh_cpp", (DL_FUNC) &_famr_update_eta_mh_cpp, 23},
+    {"_famr_update_eta_mh_cpp", (DL_FUNC) &_famr_update_eta_mh_cpp, 25},
     {"_famr_rgig_cpp", (DL_FUNC) &_famr_rgig_cpp, 3},
     {"_famr_rig_cpp", (DL_FUNC) &_famr_rig_cpp, 1},
     {"_famr_submat_cpp", (DL_FUNC) &_famr_submat_cpp, 3},
@@ -451,6 +497,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_famr_update_phi_DL_cpp", (DL_FUNC) &_famr_update_phi_DL_cpp, 4},
     {"_famr_update_omega_DL_cpp", (DL_FUNC) &_famr_update_omega_DL_cpp, 4},
     {"_famr_update_Theta_mh_cpp", (DL_FUNC) &_famr_update_Theta_mh_cpp, 8},
+    {"_famr_update_random_intercept_cpp", (DL_FUNC) &_famr_update_random_intercept_cpp, 9},
+    {"_famr_update_xi_mh_cpp", (DL_FUNC) &_famr_update_xi_mh_cpp, 17},
     {NULL, NULL, 0}
 };
 

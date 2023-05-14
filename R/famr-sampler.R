@@ -1,14 +1,18 @@
 #' @id vector of length N, unique id of subjects, might contain duplicated id
 #' 
+#' @export
 famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL, 
                  nthin=1, nwarmup=NULL,
-                 adaptiveM=F, adaptiveMWG=F,
+                 adaptiveM=F, adaptiveMWG=F, adaptiveMWG_batch=50,
                  X_pred=NULL, Z_pred=NULL, Z_int_pred=NULL,
                  include_rep=FALSE, include_interactions=FALSE,
                  init_eta_eps=1e-2, init_a1_eps=1, init_a2_eps=1,
                  Ilod=NULL, loda=NULL, lodb=NULL,
                  s0=0.084, r=2.5, verbose=FALSE, missing_Y=FALSE, binary=NULL,
-                 eta=NULL, Theta=NULL, B=NULL, Sigma=NULL, sigmax_sqinv=NULL
+                 eta=NULL, Theta=NULL, B=NULL, Sigma=NULL, sigmax_sqinv=NULL,
+                 W=NULL, xi=NULL, sigmay_sqinv=NULL,
+                 random_intercept=FALSE,
+                 outcomes_specific_factors=FALSE, H=2, init_xi_eps=1e-2, xi_m1=2, xi_m2=3
                  ) {
   
   if (is.vector(Y)) Y <- matrix(Y, ncol = 1)
@@ -24,7 +28,8 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   p_z <- ncol(Z) # number of covariates
   p_int <- ncol(Z_int) # number of covariates interacting with the mixture latent factors
 
-  # Mean-centered X to remove intercepts
+  # Mean-centered X to remove intercepts in factor model
+  Xmean <- colMeans(X)
   X <- scale(X, center = T, scale = F)
   # If there are missing values in Y
   O <- (!is.na(Y))*1 # indicators of observed Y
@@ -42,6 +47,8 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   prm <- list()
   prm[["id"]] <- id
   prm[["uid"]] <- unique(id)
+  prm[['numeric_id']] <- as.numeric(factor(prm$id, levels = prm$uid))
+  prm[["lpmf"]] <- rep(-99999999, n) # log likelihood
   # K_int is the total number of predictors including 
   # the K factors, K*p_int interactions, and p_z covariates
   K_int <- K + p_z + p_int*K
@@ -49,19 +56,44 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   # outcome-specific intercept (needed for probit model)
   # ********************************************
   prm[["alpha"]] <- rnorm(q)
+  if (random_intercept) {
+    prm[["xi"]] <- array(0, dim=c(n, q))
+    prm[["nu_sqinv"]] <- rgamma(1, 2.5*0.5, 2.5*0.084*0.5) # between subject error
+    prm[["sigmay_sqinv"]] <- rgamma(1, 2.5*0.5, 2.5*0.084*0.5) # within subject error
+  }
   # ********************************************
   # TPBN prior on main effects of factors/covariates & interactions with covariates
   # ********************************************
   prm[["B"]] <- array(rnorm(q * K_int, 0, 100), dim = c(K_int, q))
   prm[["psi"]] <- rep(1/2*1/(q*sqrt(n * log(n))), K_int) # shrinkage on rows of B
   prm[["zeta"]] <- 1/2*prm$psi # shrinkage on rows of B
+  # *********************************************
+  # Observation noise in the outcomes
+  # *********************************************
+  if (outcomes_specific_factors) {
+    prm[["sigmay_sqinv"]] <- rgamma(q, 2.5*0.5, 2.5*0.084*0.5) # noise variances
+    prm[["xi"]] <- array(rnorm(n * H, 0, 1), dim = c(n, H)) # random outcome-specific factors
+    prm[["xi_n_accepted"]] <- rep(0, n) # MH acceptance
+    prm[["xi_eps"]] <- rep(init_xi_eps, n) # MH proposal scales
+    prm[["xi_A"]] <- array(0, dim = c(H, H, n)) # adaptive MH 
+    prm[["xi_b"]] <- array(0, dim = c(H, n)) # adaptive MH
+    prm[["xi_lpmf"]] <- rep(-99999999, n) # log likelihood
+    # Multiplicative Gamma Process prior on the loadings
+    prm[["W"]] <- array(rnorm(q * H, 0, 10), dim = c(q, H)) # loadings
+    prm[["W_phi"]] <- array(rgamma(q * H, 1), dim = c(q, H)) # local shrinkage for W
+    prm[["W_delta"]] <- rgamma(H, 1) # global shrinkage param for factor H
+    prm[["W_a1"]] <- xi_m1
+    prm[["W_a2"]] <- xi_m2
+    prm[["W_a1_n_accepted"]] <- 0L
+    prm[["W_a2_n_accepted"]] <- 0L
+  }
   prm[["Sigma"]] <- diag(rgamma(q, 2, 1), q, q) # covariance of y_i
   prm[["Sigmainv"]] <- diag(1/diag(prm$Sigma), q, q)
   # ********************************************
   # Factor model
   # ********************************************
   prm[["sigmax_sqinv"]] <- rgamma(p, 2.5*0.5, 2.5*0.084*0.5) # noise variance
-  prm[["eta"]] <- array(rnorm(n * K), dim = c(n, K)) # random factors
+  prm[["eta"]] <- array(rnorm(n * K, 0, 1), dim = c(n, K)) # random factors
   prm[["eta_n_accepted"]] <- rep(0, n) # MH acceptance
   prm[["eta_eps"]] <- rep(init_eta_eps, n) # MH proposal scales
   prm[["eta_A"]] <- array(0, dim = c(K, K, n)) # adaptive MH 
@@ -117,9 +149,14 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                # b0x = array(NA, dim=c(niter - nwarmup, p)), # main effect only
                # alpha = array(NA, dim=c(niter - nwarmup, q)), # outcome-specific intercept
                Sigma = array(NA, dim = c(niter - nwarmup, q, q)),
-               #Theta = array(NA, dim = c(niter - nwarmup, p, K)),
-               #eta = array(NA, dim = c(niter - nwarmup, n, K)),
+               Theta = array(NA, dim = c(niter - nwarmup, p, K)),
+               # eta = array(NA, dim = c(niter - nwarmup, n, K)),
+               xi = array(NA, dim = c(niter - nwarmup, n, q)),
                sigmax_sqinv = array(NA, dim = c(niter - nwarmup, p)),
+               p_eta_accept = c(),
+               # p_xi_accept = c(),
+               eta_eps = c(),
+               # xi_eps = c(),
                NULL
   )
   if (p_int > 0) {
@@ -132,7 +169,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
     sims[["Y_rep"]] = array(NA, dim=c(niter - nwarmup, dim(Y)))
   }
   if (!is.null(X_pred)) {
-    sims[["E_Y_pred"]] = array(0, dim=c(nrow(X_pred), q))
+    sims[["E_Y_pred"]] = array(0, dim=c(niter - nwarmup, nrow(X_pred), q))
     X_pred_int <- get_eta_int(X_pred, p, Z_pred, Z_int_pred, 1:nrow(X_pred))
   }
   if (include_interactions) {
@@ -147,30 +184,114 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   # prm[["Sigma"]] <- Sigma # TODO FOR DEBUGGING
   # prm[["Sigmainv"]] <- solve(Sigma)
   # prm[["eta"]] <- eta # TODO FOR DEBUGGING
+  # prm[['xi']] <- xi
   # prm[["sigmax_sqinv"]] <- sigmax_sqinv
-  n_till_adaptive <- min(3000, round(niter/10)) 
+  n_till_adaptive <- min(3000, round(niter/10))
   for (s in 1:niter) {
     setTxtProgressBar(pb, s / niter)
     # MCMC steps
-    prm[["sigmax_sqinv"]] <- update_sigmax_sqinv(prm, Y, X, K, s0, r)
+    prm[["sigmax_sqinv"]] <- update_sigmax_sqinv(prm, X, K, s0, r)
     ## Theta MGP ---------------------------------------------------------------
-    tmp <- update_Theta_MGP(prm, Y, X, K)
+    tmp <- update_Theta_MGP(prm, X, K)
     prm[names(tmp)] <- tmp
-    ## eta using Adaptive Metroplis-within-Gibbs -------------------------------
-    prm <- update_eta_mh(prm, Y, X, Z, Z_int, n, K, p, q, p_z, p_int,
-                         s, adaptiveM=((s>n_till_adaptive) & adaptiveM),
-                         adaptiveMWG=adaptiveMWG)
-    ## Outcome regression ------------------------------------------------------
-    tmp <- update_B_TPBN(prm, Y, X, K, Z, Z_int)
-    prm[names(tmp)] <- tmp
-    ## Factor interactions -----------------------------------------------------
-    if (include_interactions) {
-      tmp <- update_Omega(prm, Y, X, K, Z, Z_int, O3, O3_is_col_na)
+    ## Outcome updates ---------------------------------------------------------
+    ## Include outcome specific latent factors ===> NOT WORKING
+    if (outcomes_specific_factors) {
+      xi_dup <- prm$xi[prm$numeric_id, ]
+      ## eta using Adaptive Metroplis-within-Gibbs -----------------------------
+      if (is.null(eta)) {
+        prm <- update_eta_mh(prm, Y - xi_dup %*% t(prm$W),
+                             X, Z, Z_int, n, K, p, q, p_z, p_int,
+                             s, adaptiveM=((s>n_till_adaptive) & adaptiveM),
+                             adaptiveMWG= adaptiveMWG,
+                             adaptiveMWG_batch=adaptiveMWG_batch)
+      } else {
+        prm[['eta']] <- eta
+      }
+      ## Outcome regression ----------------------------------------------------
+      tmp <- update_B_TPBN(prm, Y - xi_dup %*% t(prm$W),
+                           X, K, Z, Z_int)
+      prm[names(tmp)] <- tmp
+      ## Factor interactions ---------------------------------------------------
+      if (include_interactions) {
+        tmp <- update_Omega(prm, Y - xi_dup %*% t(prm$W),
+                            X, K, Z, Z_int, O3, O3_is_col_na)
+        prm[names(tmp)] <- tmp
+      }
+      ## Outcome noise variance ------------------------------------------------
+      tmp <- update_sigmay_sqinv(prm, Y - xi_dup %*% t(prm$W), s0, r)
+      prm[names(tmp)] <- tmp
+      ## Outcome specific factor loadings --------------------------------------
+      if (is.null(W)) {
+        tmp <- update_W_MGP(prm, Y, H)
+        prm[names(tmp)] <- tmp
+      } else {
+        prm[["W"]] <- W # TODO REMOVE, this is for debugging
+      }
+      ## Outcome specific factors ----------------------------------------------
+      if (is.null(xi)) {
+        prm <- update_xi_mh(prm, Y, H, n, q, s, 
+                            adaptiveM = ((s>n_till_adaptive) & adaptiveM),
+                            adaptiveMWG = adaptiveMWG,
+                            adaptiveMWG_batch)
+      } else {
+        prm[["xi"]] <- xi # TODO REMOVE
+      }
+      
+    ## Include only the random intercepts
+    } else if (random_intercept) {
+      ## eta using Adaptive Metropolis-within-Gibbs -----------------------------
+      if (is.null(eta)) {
+        prm <- update_eta_mh_re(prm, Y, 
+                                X, Z, Z_int, n, K, p, q, p_z, p_int,
+                                s, adaptiveM = ((s>n_till_adaptive) & adaptiveM),
+                                adaptiveMWG = adaptiveMWG,
+                                adaptiveMWG_batch = adaptiveMWG_batch)
+      } else {
+        prm[['eta']] <- eta
+      }
+      ## Outcome regression ----------------------------------------------------
+      tmp <- update_B_TPBN_re(prm, Y, X, K, Z, Z_int)
+      prm[names(tmp)] <- tmp
+      ## Factor interactions ---------------------------------------------------
+      if (include_interactions) { # TODO
+        tmp <- update_Omega(prm, Y - prm$ri, X, K, Z, Z_int, O3, O3_is_col_na)
+        prm[names(tmp)] <- tmp
+      }
+      ## Random intercept ------------------------------------------------------
+      if (is.null(xi)) {
+        prm <- update_random_intercept(prm, Y) 
+      } else {
+        prm[["xi"]] <- xi
+      }
+      ## Outcome covariance ----------------------------------------------------
+      tmp <- update_Sigma_IW_TPBN_re(prm, Y, Z, Z_int, K, binary)
+      prm[names(tmp)] <- tmp
+      
+    ## Model without decomposing the noise variance into between individual variances
+    # and within individual variances
+    } else {
+      ## eta using Adaptive Metroplis-within-Gibbs -----------------------------
+      if (is.null(eta)) {
+        prm <- update_eta_mh(prm, Y, X, Z, Z_int, n, K, p, q, p_z, p_int,
+                             s, adaptiveM = ((s>n_till_adaptive) & adaptiveM),
+                             adaptiveMWG = adaptiveMWG,
+                             adaptiveMWG_batch=adaptiveMWG_batch)
+      } else {
+        prm[['eta']] <- eta
+      }
+      ## Outcome regression ----------------------------------------------------
+      tmp <- update_B_TPBN(prm, Y, X, K, Z, Z_int)
+      prm[names(tmp)] <- tmp
+      ## Factor interactions ---------------------------------------------------
+      if (include_interactions) {
+        tmp <- update_Omega(prm, Y, X, K, Z, Z_int, O3, O3_is_col_na)
+        prm[names(tmp)] <- tmp
+      }
+      ## Outcome covariance ----------------------------------------------------
+      tmp <- update_Sigma_IW_TPBN(prm, Y, Z, Z_int, K, binary)
       prm[names(tmp)] <- tmp
     }
-    ## Outcome covariance ------------------------------------------------------
-    tmp <- update_Sigma_IW_TPBN(prm, Y, Z, Z_int, K, binary)
-    prm[names(tmp)] <- tmp
     
     # Imputation
     # if (!is.null(Ilod) & !is.null(loda) & !is.null(lodb)) {
@@ -184,14 +305,21 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
     
     # store samples
     if (s > nwarmup) {
+      # store adaptive MH diagnostics
+      if ((s %% adaptiveMWG_batch == 0)) {
+        sims[["p_eta_accept"]] <- c(sims[["p_eta_accept"]],
+                                    mean(prm$eta_n_accepted/adaptiveMWG_batch))
+        # sims[["p_xi_accept"]] <- c(sims[["p_xi_accept"]],
+        #                            mean(prm$xi_n_accepted/adaptiveMWG_batch))
+        sims[["eta_eps"]] <- rbind(sims[["eta_eps"]], prm$eta_eps)
+        # sims[["xi_eps"]] <- rbind(sims[["xi_eps"]], prm$xi_eps)
+      }
+      sims[["xi"]][s-nwarmup, , ] <- prm$xi
       sims[["sigmax_sqinv"]][s-nwarmup, ] <- prm$sigmax_sqinv
-      # sims[["Theta"]][s-nwarmup, , ] <- prm$Theta
+      sims[["Theta"]][s-nwarmup, , ] <- prm$Theta
       # sims[["eta"]][s-nwarmup, , ] <- prm$eta
       # sims[["b0"]][s-nwarmup, ] <- prm$b0
       # sims[["alpha"]][s-nwarmup, ] <- prm$alpha
-      # if (include_interactions) {
-        # sims[["Omega"]][s-nwarmup,,] <- prm$Omega
-      # }
       
       # Rescaling for probit latent variables
       # scale_B <- prm$B
@@ -227,17 +355,6 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         temp_Bx <- rbind(temp_Bx, sims[["Bz"]][s-nwarmup, , ])
       }
       stopifnot(dim(temp_Bx) == c(p+p*p_int+p_z, q))
-      # temp_Bx <- matrix(0, ncol=p, nrow=q)
-      # j <- 0
-      # jx <- 0
-      # while (j < (K + K*p_int)) {
-      #   temp_Bx[, (jx+1):(jx+p)] <- crossprod(prm$B[(j+1):(j+K),,drop=F], Ax)
-      #   j <- j + K
-      #   jx <- jx + p
-      # }
-      # temp_Bx <- t(temp_Bx)
-      # sims[["Bx"]][s-nwarmup, , ] <- temp_Bx
-      
       
       if (include_interactions) {
         sims[["psir"]][s-nwarmup,] <- prm$Omega_psir
@@ -255,7 +372,6 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                 simplify = F),
           along = -1)
       }
-      #sims[["b0x"]][s-nwarmup, ] <- Ax %*% prm$b0[1:K]
       
       # Fitted values for Y
       if (include_rep) {
@@ -264,6 +380,12 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
           MASS::mvrnorm(nrow(Y), rep(0,q), prm$Sigma)
         if (include_interactions) {
           Y_rep <- Y_rep + prm$eta_quad %*% prm$Omega
+        }
+        if (outcomes_specific_factors) {
+          Y_rep <- Y_rep + xi_dup %*% t(prm$W)
+        }
+        if (random_intercept) {
+          Y_rep <- Y_rep + prm$xi[prm$numeric_id, ]
         }
         # if (sum(binary) > 0) {
         #   Y_rep[, binary == 1] <- 1 * (Y_rep[, binary == 1] > 0)
@@ -282,15 +404,24 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                                    aperm(sims[["Omega_array_x"]][s-nwarmup,,,], c(2, 3, 1)),
                                    nrow(X_pred), q)
         }
-        sims[["E_Y_pred"]] <- sims[["E_Y_pred"]] + (Y_pred / (niter-nwarmup))
+        sims[["E_Y_pred"]][s-nwarmup, , ] <- Y_pred
       }
     }
   }
-  message(paste("Metropolis-Hasting acceptance prob. of eta is", 
-                round(sum(prm$eta_n_accepted)/(niter*n), 3)))
+  
+  if (s >= adaptiveMWG_batch) {
+    message(paste("\nMetropolis-Hasting acceptance prob. of eta is",
+                  round(tail(sims[["p_eta_accept"]], 1), 3)))
+  }
+  # message(paste("\nMetropolis-Hasting acceptance prob. of xi is", 
+  #               round(tail(sims[["p_xi_accept"]], 1), 3)))
   message(paste("\nMetropolis-Hasting acceptance prob. of a1 is",
                 round(prm$a1_n_accepted/niter, 3)))
   message(paste("\nMetropolis-Hasting acceptance prob. of a2 is",
                 round(prm$a2_n_accepted/niter, 3)))
+  # message(paste("\nMetropolis-Hasting acceptance prob. of m1 is",
+  #               round(prm$W_a1_n_accepted/niter, 3)))
+  # message(paste("\nMetropolis-Hasting acceptance prob. of m2 is",
+  #               round(prm$W_a2_n_accepted/niter, 3)))
   return(sims)
 }

@@ -50,6 +50,32 @@ update_B_TPBN <- function(prm, Y, X, K, Z, Z_int) {
               eta_int = eta_int))
 }
 
+# Use when there is random intercept
+update_B_TPBN_re <- function(prm, Y, X, K, Z, Z_int) {
+  q <- ncol(Y)
+  n <- nrow(Y)
+  sinv <- 1/(1/prm$sigmay_sqinv + 1/prm$nu_sqinv)
+  eta_int <- get_eta_int(prm$eta, K, Z, Z_int, prm$id)
+  eta_int <- eta_int * sqrt(sinv) #sqrt(prm$sigmay_sqinv)
+  p <- ncol(eta_int)
+  alpha <- update_intercept(Y - eta_int %*% prm$B - prm$eta_quad %*% prm$Omega, 
+                            prm$Sigma*(1/prm$sigmay_sqinv))
+  Ytilde <- Y - tcrossprod(rep(1, n), prm$alpha) - 
+    prm$eta_quad %*% prm$Omega #-
+    # prm$xi[prm$numeric_id, ]
+  Ytilde <- Ytilde * sqrt(sinv) #sqrt(prm$sigmay_sqinv)
+  B <- update_B_TPBN_cpp(eta_int, Ytilde, prm$Sigma, prm$psi, p, q)
+  psi <- as.vector(update_psi_TPBN_cpp(B, prm$Sigmainv, prm$zeta, p, q))
+  zeta <- update_zeta_TPBN_cpp(psi, p, global_shrink=1/(K*sqrt(n*log(n))))
+  stopifnot(dim(B) == dim(prm$B))
+  stopifnot(sum(is.na(B)) == 0)
+  return(list(alpha = alpha,
+              B = B,
+              psi = psi,
+              zeta = zeta,
+              eta_int = eta_int))
+}
+
 # Using a flat prior p(a) \prop 1
 update_intercept <- function(Y, Sigma) {
   # use flat prior on alpha

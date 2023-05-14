@@ -47,3 +47,23 @@ double rig_cpp(double mu) {
   if(u < (mu / (x + mu))) return x;
   else return mu2 / x;
 }
+
+// // [[Rcpp::export]]
+// arma::mat lpmf_cpp(const arma::mat& Y, const arma::mat& X, const arma::mat& Z, 
+//                    const arma::mat& Z_int, int n,
+//                    const arma::mat& B, const arma::mat& Theta, 
+//                    const arma::mat& Omega, const arma::mat& eta_int, 
+//                    const arma::mat& eta_quad,
+//                    const arma::mat& Sigmainv, const arma::vec& sigmax_sqinv,
+//                    bool include_interactions = false) {
+//   arma::vec ll(n);
+//   arma::vec my = eta_int * B;
+//   if (include_interactions) {
+//     my += eta_quad * 1;
+//   }
+//   arma::vec mx = eta_int *
+//   for (int i=0; i<n; i++) {
+//     my = 1;
+//   }
+// }
+

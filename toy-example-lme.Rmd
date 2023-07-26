@@ -1,0 +1,279 @@
+---
+title: "FAMR Toy Example"
+author: "Phuc Nguyen"
+date: "2022-10-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+devtools::load_all()
+```
+
+## Toy example generated from FAMR 
+
+TODO: improve the model by pooling the effects, removing sparsity(?), adding time specific
+
+* 4 latent factors, 2 are predictive, 2 are not
+* 10 correlated predictors
+* 2 covariates
+* Interaction between one binary covariate and one latent factor
+* 10 correlated outcomes
+
+```{r}
+set.seed(123)
+## sample size
+n <- 100
+## mixture dimension
+p <- 10
+## covariates dimension
+p_covariates <- 1
+## latent factor dimension
+k_effective <- 2
+## outcome dimension
+q <- 4
+## number of repeated measurement
+t <- 3
+id <- rep(1:n, t) # stack observations
+time <- rep(1:t, each=n)
+## noise variance for mixtures
+sigma_x <- runif(p, 0.2, 0.5)
+## sample effective latent factors
+eta <- matrix(rnorm(n*k_effective), n, k_effective)
+eta_pred <- matrix(rnorm(n*k_effective), n, k_effective)
+## define a loading matrix for the effective factors
+Lambda <- matrix(rnorm(p*k_effective), p, k_effective)
+## generate mixture n x p
+X <- eta %*% t(Lambda) + MASS::mvrnorm(n, mu=rep(0, p), Sigma = diag(sigma_x))
+X_pred <- eta_pred %*% t(Lambda) + MASS::mvrnorm(n, mu=rep(0, p), Sigma = diag(sigma_x))
+## generate regression matrix
+B <- matrix(c(runif(q, 0.5, 0.7), runif(q, -0.7, -0.5)), q, k_effective) # main effect of factor
+B[, -(1:2)] <- 0
+Ax <- solve( t(Lambda) %*% diag(1/sigma_x^2) %*% Lambda + diag(1, k_effective, k_effective))
+Ax <- Ax %*% t(Lambda) %*% diag(1/sigma_x^2)
+Bx <- B %*% Ax
+## generate covariates n x p_covariates
+Z <- matrix(rbinom(n, 1, prob = 0.6), n, 1)
+Z_pred <- matrix(rbinom(n, 1, prob = 0.6), n, 1)
+## effect of covariates
+D <- runif(q, 0.8, 1.2)
+## generate outcome covariance
+Sigma <- diag(0.3, q, q)
+CS <- matrix(0.7, q, q)
+diag(CS) <- 1
+xi <- MASS::mvrnorm(n, rep(0, q), CS)
+E <- xi[id, ] + MASS::mvrnorm(n*t, mu = rep(0, q), Sigma = Sigma)
+## generate outcomes n x q
+Y <- eta[id,] %*% t(B) + Z[id, ,drop=F] %*% t(D) + E
+Y_pred_oracle <- eta_pred[id, ] %*% t(B) + Z_pred[id, ,drop=F] %*% t(D)
+Y_pred <- Y_pred_oracle +
+  MASS::mvrnorm(n, rep(0, q), CS)[id, ] +
+  MASS::mvrnorm(n*t, mu = rep(0, q), Sigma = Sigma)
+```
+
+```{r}
+# 500k iter, AMWG, lowest ESS is 5000.
+# 500k iter, AM, lowest ESS is 4500.
+# HM eta is better than Gibbs eta
+set.seed(5555)
+system.time(
+  fit_err <- famr(Y=Y, X=X[id, ], K=k_effective, 
+                   Z=Z[id, ,drop=F], Z_int=Z[id, ,drop=F], id=id,
+            niter = 10000, nwarmup = 9000,
+            init_eta_eps=1.9, # tune this for better performance!
+            X_pred=X_pred[id, ], Z_pred=Z_pred[id, ,drop=F], 
+            Z_int_pred=Z_pred[id, ,drop=F],
+            init_a1_eps = 1.75, init_a2_eps = 1.75, # tune so acceptance around 0.4
+            adaptiveMWG=T,
+            include_interactions = F,
+            include_rep = F,
+            random_intercept = F,
+            adaptiveMWG_batch = 30 # can tune this
+            )
+)
+```
+
+```{r}
+E_Y_pred <- apply(fit_err$E_Y_pred, c(2,3), mean)
+sum((Y_pred - E_Y_pred)^2) / length(Y_pred)
+E_Y_pred0 <- rep(1, nrow(Y_pred)) %*% t(colMeans(Y))
+sum((Y_pred - E_Y_pred0)^2) / length(Y_pred)
+sum((Y_pred - Y_pred_oracle)^2) / length(Y_pred)
+
+ggplot(, aes(x=id, y=Y_pred[,1], group=as.factor(id))) + geom_path() +
+    geom_point(aes(x=id, y=E_Y_pred0[,1]), colour='gray') +
+  geom_point(aes(x=id, y=Y_pred_oracle[,1]), colour='red') +
+  geom_point(aes(x=id, y=E_Y_pred[,1]), colour='darkgreen')
+
+mean((apply(fit_err$Bx, c(2, 3), mean) %>% t() - Bx)^2)
+
+plot(fit_err$Bz[,1,1], type="l")
+abline(h=1, col='red')
+apply(fit_err$B, c(2,3), mean)
+colMeans(fit_err$psi)
+apply(fit_err$Sigma, c(2,3), mean)
+```
+
+Hyperparameters to tune:
+- init_eta_eps: larger may help if posterior underestimates magnitude of effect.
+- adaptiveMWG_batch:
+- hyperparam of prior on nu_sq: choose to limit nu_sq/(1+nu_sq) as proportion of between-subject variation compared to noise/within-subject variation.
+- hyperparam of prior on Sigma (Y): changing k1, k2 in (q + k1) and k2(diag(cov(Y))). Increasing k2 increases noise variance. Increasing k1 increases concentration around the prior
+
+```{r}
+set.seed(5555)
+system.time(
+  fit_re <- famr(Y=Y, X=X[id, ], K=k_effective, 
+                   Z=Z[id, ,drop=F], Z_int=Z[id, ,drop=F], id=id,
+            niter = 10000, nwarmup = 9000,
+            init_eta_eps=1.9, # tune this for better performance!
+            X_pred=X_pred[id, ], Z_pred=Z_pred[id, ,drop=F], 
+            Z_int_pred=Z_pred[id, ,drop=F],
+            init_a1_eps = 1.75, init_a2_eps = 1.75, # tune so acceptance around 0.4
+            adaptiveMWG=T,
+            include_interactions = F,
+            include_rep = F,
+            random_intercept = T,
+            adaptiveMWG_batch = 30 # can tune this
+            )
+)
+```
+
+```{r}
+print("MSE predictive new Y")
+E_Y_pred_re <- apply(fit_re$E_Y_pred, c(2,3), mean)
+sum((Y_pred - E_Y_pred_re)^2) / length(Y_pred)
+sum((Y_pred - E_Y_pred)^2) / length(Y_pred)
+sum((Y_pred - E_Y_pred0)^2) / length(Y_pred)
+sum((Y_pred - Y_pred_oracle)^2) / length(Y_pred)
+
+ggplot(, aes(x=id, y=Y_pred[,1], group=as.factor(id))) + geom_path() +
+    geom_point(aes(x=id, y=E_Y_pred0[,1]), colour='gray') +
+  geom_point(aes(x=id, y=Y_pred_oracle[,1]), colour='red') +
+  geom_point(aes(x=id, y=E_Y_pred[,1]), colour='darkgreen') +
+  geom_point(aes(x=id, y=E_Y_pred_re[,1]), colour='blue')
+
+print("MSE of estimate of Bx")
+mean((apply(fit_err$Bx, c(2, 3), mean) %>% t() - Bx)^2)
+mean((apply(fit_re$Bx, c(2, 3), mean) %>% t() - Bx)^2)
+
+plot(fit_re$Bz[,1,1], type="l")
+abline(h=1, col='red')
+print("Estimates: B - psi - Sigma - nu_sq")
+apply(fit_re$B, c(2,3), mean)
+colMeans(fit_re$psi)
+apply(fit_re$Sigma, c(2,3), mean)
+1/mean(fit_re$nu_sqinv)
+```
+
+
+
+
+```{r}
+# Check autocorrelations
+# Model without random intercepts
+acf(fit_err$Bx[,1,1])
+plot(fit_err$p_eta_accept, type='l')
+matplot(fit_err$eta_eps[, sample(1:n, 100)], type='l')
+# Model with random intercepts
+acf(fit_re$Bx[,1,1])
+plot(fit_re$p_eta_accept, type='l')
+matplot(fit_re$eta_eps[, sample(1:n, 100)], type='l')
+```
+# Predictive checks
+
+mean, median, max are fine
+min is under-estimated.
+```{r}
+tmp <- apply(fit1$Y_rep, c(1, 3), min)
+for (i in 1:q) {
+  hist(tmp[,i])
+  abline(v=min(Y[,i]), col="red")
+}
+```
+
+# PCA + GLMMs
+
+```{r}
+k <- k_effective
+pca_fit <- prcomp(X, center = T, scale. = T)
+pca_lme_formula <- as.formula(paste0("y ~ (1|id) + Z*(", 
+                                     paste(paste0("X", 1:k), collapse = "+"),
+                                     ")"))
+pca_lmer_list <- lapply(1:q, function(i) {
+  lme_df <- cbind(id, pca_fit$x[,1:k][id,], Z[id, ], Y[,i]) %>% as.data.frame() %>%
+    magrittr::set_colnames(c("id", paste0("X", 1:k), 'Z', "y"))
+  lme_fit <- lme4::lmer(pca_lme_formula, lme_df)
+  lme_fit
+})
+pca_X_pred <- scale(X_pred, center = pca_fit$center) %*% pca_fit$rotation
+pca_lmer_pred <- lapply(pca_lmer_list, function(fit) {
+  lme_pred_df <- cbind(id, pca_X_pred[,1:k][id,], Z_pred[id,]) %>% as.data.frame() %>%
+    magrittr::set_colnames(c("id", paste0("X", 1:k), "Z"))
+  predict(fit, lme_pred_df)
+}) %>%
+  abind::abind(along=2)
+sum((Y_pred - pca_lmer_pred)^2) / length(Y_pred)
+```
+
+```{r}
+pca_lmer_coef <- lapply(pca_lmer_list, function(fit) {
+  summary(fit)$coef[-c(1, k+2),1]
+}) %>% abind::abind(along=2)
+pca_lmer_me <- t(pca_fit$rotation[,1:k] %*% pca_lmer_coef[1:k,])
+pca_lmer_sig <- 1*(abs(pca_lmer_me) > .Machine$double.eps)
+mean((pca_lmer_me - Bx)^2)
+```
+
+
+# PCA + BRMS
+
+```{r}
+brms_df <- cbind(id, pca_fit$x[,1:k][id,], Z[id,], Y) %>%
+  as.data.frame() %>%
+  magrittr::set_colnames(c("id", paste0("X", 1:k), "Z", paste0("Y", 1:q)))
+bform1 <- 
+  brms::bf(as.formula(paste0("mvbind(",
+                       paste(paste0("Y", 1:q), collapse = ","),
+                       ") ~ (",
+                       paste(paste0("X", 1:k), collapse = "+"),
+                       ")*Z + (1|p|id)"))) +
+  brms::set_rescor(TRUE)
+
+brms_fit <- brms::brm(bform1, data = brms_df, chains = 2, cores = 3,
+                      iter=10000)
+```
+
+```{r}
+brms_coef <- matrix(brms::fixef(brms_fit)[-(1:q), 1], 2*k+1, q)
+```
+
+```{r}
+brms_pred_df <- cbind(1, pca_X_pred[,1:k][id,], Z_pred[id, ],  pca_X_pred[,1:k][id,]*Z_pred[id,]) %>%
+  as.data.frame() %>%
+  magrittr::set_colnames(c("id", paste0("X", 1:k), "Z"))
+brms_pred <- predict(brms_fit, newdata=brms_pred_df)
+```
+
+```{r}
+# MSE of the main effect estimates
+cat('\n Predictive MSE:', mean((brms_pred[,1,] - Y_pred)^2))
+cat('\n MSE Main Effect Bx: ', mean((pca_fit$rotation[,1:k] %*% brms_coef[1:k, ] - t(Bx))^2))
+cat('\n MSE Interaction Effect: ', 
+    mean((pca_fit$rotation[,1:k] %*% brms_coef[(k+2):(2*k+1), ] - 0)^2))
+cat('\n MSE Covariate Effect: ', 
+    mean((brms_coef[k+1,] - D)^2))
+```
+```{r}
+ggplot(, aes(x=id, y=Y_pred[,1], group=as.factor(id))) + geom_path() +
+    geom_point(aes(x=id, y=E_Y_pred0[,1]), colour='gray') +
+  geom_point(aes(x=id, y=Y_pred_oracle[,1]), colour='red') +
+  geom_point(aes(x=id, y=E_Y_pred[,1]), colour='darkgreen') +
+  geom_point(aes(x=id, y=E_Y_pred_re[,1]), colour='blue') +
+  geom_point(aes(x=id, y=brms_pred[,1,][,1]), colour='purple')
+```
+
+

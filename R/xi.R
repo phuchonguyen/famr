@@ -7,8 +7,8 @@ update_random_intercept <- function(prm, Y) {
                 prm$Sigma, prm$sigmay_sqinv, prm$nu_sqinv,
                 ncol(Y), length(prm$uid))
   # Update between subject variance
-  a <- 0.1 + length(prm$uid)/2
-  b <- 0.001 + sum(apply(prm$xi, 1, function(x) t(x) %*% prm$Sigmainv %*% x))/2
+  a <- 3.2 + length(prm$uid)/2
+  b <- 1/25 + sum(apply(prm$xi, 1, function(x) t(x) %*% prm$Sigmainv %*% x))/2
   prm$nu_sqinv <- rgamma(1, shape=a, rate=b)
   stopifnot(prm$nu_sqinv > .Machine$double.eps)
   

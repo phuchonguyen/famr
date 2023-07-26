@@ -50,7 +50,7 @@ update_sigmax_sqinv <- function(prm, X, K, s0=0.084, r=2.5) {
 # When there is random intercepts
 update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, binary) {
   p <- ncol(prm$eta_int)
-  p_quad <- ncol(prm$eta_quad)
+  p_quad <- 0#ncol(prm$eta_quad)
   n <- nrow(Y)
   q <- ncol(Y)
   Ytilde <- Y - tcrossprod(rep(1, n), prm$alpha) -
@@ -60,10 +60,10 @@ update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, binary) {
   sinv <- 1/(1/prm$sigmay_sqinv + 1/prm$nu_sqinv)
   YtY <- crossprod(Ytilde, Ytilde) * sinv #prm$sigmay_sqinv
   BtB <- t(prm$B) %*% diag(1/prm$psi, p, p) %*% prm$B
-  OtO <- t(prm$Omega) %*% diag(1/prm$Omega_psi, p_quad, p_quad) %*% prm$Omega
+  OtO <- 0#t(prm$Omega) %*% diag(1/prm$Omega_psi, p_quad, p_quad) %*% prm$Omega
   # ItI <- t(prm$xi) %*% prm$xi * prm$nu_sqinv
-  df <- n + p + p_quad + (q + 3)
-  S <- YtY + BtB + OtO + diag(10, q, q) #+ ItI
+  df <- n + p + p_quad + (q + 10)
+  S <- YtY + BtB + OtO + 15*(diag(1e-5 + apply(Y, 2, var), q, q)) #+ ItI
   tryCatch(solve(S), error=function(e) {print(S)})
   # Sigma <- CholWishart::rInvWishart(1, df = df, Sigma = S)[,,1]
   Sigmainv <- tryCatch(MCMCpack::rwish(df, solve(S)), error=function(e){print("rwish re :(")})
@@ -79,13 +79,5 @@ update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, binary) {
     d[binary==0] <- 1
     Sigma <- diag(d)%*%Sigma%*%diag(d)
   }
-  
-  # sample sigmay_sqinv
-  a <- 0.1 + n/2 
-  b <- 0.001 + sum(apply(Ytilde - prm$xi[prm$numeric_id, ], 
-                               1, 
-                               function(y) t(y) %*% Sigmainv %*% y))/2
-  sigmay_sqinv <- rgamma(1, shape=a, rate=b)
-  stopifnot(sigmay_sqinv > .Machine$double.eps)
-  return(list(Sigma = Sigma, Sigmainv = Sigmainv, sigmay_sqinv = sigmay_sqinv))
+  return(list(Sigma = Sigma, Sigmainv = Sigmainv))
 }

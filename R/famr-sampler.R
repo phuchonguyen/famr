@@ -127,10 +127,12 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   }
   sims <- list(B = array(NA, dim=c(niter - nwarmup, K_int, q)),
                Bx = array(NA, dim=c(niter - nwarmup, p, q)),
+               psi = array(NA, dim=c(niter - nwarmup, K_int)),
                # b0 = array(NA, dim=c(niter - nwarmup, K_int)),
                # b0x = array(NA, dim=c(niter - nwarmup, p)), # main effect only
                # alpha = array(NA, dim=c(niter - nwarmup, q)), # outcome-specific intercept
                Sigma = array(NA, dim = c(niter - nwarmup, q, q)),
+               nu_sqinv = matrix(NA, niter - nwarmup, 1),
                Theta = array(NA, dim = c(niter - nwarmup, p, K)),
                # eta = array(NA, dim = c(niter - nwarmup, n, K)),
                sigmax_sqinv = array(NA, dim = c(niter - nwarmup, p)),
@@ -246,7 +248,6 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                                     mean(prm$eta_n_accepted/adaptiveMWG_batch))
         sims[["eta_eps"]] <- rbind(sims[["eta_eps"]], prm$eta_eps)
       }
-      sims[["xi"]][s-nwarmup, , ] <- prm$xi
       sims[["sigmax_sqinv"]][s-nwarmup, ] <- prm$sigmax_sqinv
       sims[["Theta"]][s-nwarmup, , ] <- prm$Theta
       # sims[["eta"]][s-nwarmup, , ] <- prm$eta
@@ -267,7 +268,11 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
       #   scale_B[, binary == 1] <- sweep(prm$B[, binary == 1, drop=FALSE], 2, temp_s, '/')
       # }
       sims[["B"]][s-nwarmup, , ] <- prm$B
+      sims[['psi']][s-nwarmup, ] <- prm$psi
       sims[["Sigma"]][s-nwarmup, , ] <- prm$Sigma
+      if (random_intercept) {
+        sims[['nu_sqinv']][s-nwarmup, ] <- prm$nu_sqinv
+      }
       
       # Effects in original predictors
       V <- solve(t(prm$Theta) %*% diag(prm$sigmax_sqinv, p, p) %*% prm$Theta + diag(1, K, K))

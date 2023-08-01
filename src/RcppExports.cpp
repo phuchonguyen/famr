@@ -137,7 +137,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // update_B_GP_cpp
-arma::cube update_B_GP_cpp(const arma::mat& Y, const arma::vec& time, const arma::cube& Bt_eta_k, const arma::mat& eta, const arma::mat& C_inv, const arma::vec& psi, const arma::vec& id, double sinv, const arma::mat& Sigma, int K, int q, int T, int n);
+arma::cube update_B_GP_cpp(const arma::mat& Y, const arma::vec& time, const arma::cube& Bt_eta_k, const arma::mat& eta, const arma::cube& C_inv, const arma::vec& psi, const arma::vec& id, double sinv, const arma::mat& Sigma, int K, int q, int T, int n);
 RcppExport SEXP _famr_update_B_GP_cpp(SEXP YSEXP, SEXP timeSEXP, SEXP Bt_eta_kSEXP, SEXP etaSEXP, SEXP C_invSEXP, SEXP psiSEXP, SEXP idSEXP, SEXP sinvSEXP, SEXP SigmaSEXP, SEXP KSEXP, SEXP qSEXP, SEXP TSEXP, SEXP nSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -146,7 +146,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::vec& >::type time(timeSEXP);
     Rcpp::traits::input_parameter< const arma::cube& >::type Bt_eta_k(Bt_eta_kSEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type eta(etaSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type C_inv(C_invSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type C_inv(C_invSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type psi(psiSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type id(idSEXP);
     Rcpp::traits::input_parameter< double >::type sinv(sinvSEXP);
@@ -156,6 +156,26 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type T(TSEXP);
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
     rcpp_result_gen = Rcpp::wrap(update_B_GP_cpp(Y, time, Bt_eta_k, eta, C_inv, psi, id, sinv, Sigma, K, q, T, n));
+    return rcpp_result_gen;
+END_RCPP
+}
+// update_B_GP_amplitude_cpp
+arma::vec update_B_GP_amplitude_cpp(arma::vec& psi_sq, arma::vec& zeta, double tau_sq, double phi, int K, int q, int T, const arma::cube& Ci, const arma::mat& Si, const arma::cube& B);
+RcppExport SEXP _famr_update_B_GP_amplitude_cpp(SEXP psi_sqSEXP, SEXP zetaSEXP, SEXP tau_sqSEXP, SEXP phiSEXP, SEXP KSEXP, SEXP qSEXP, SEXP TSEXP, SEXP CiSEXP, SEXP SiSEXP, SEXP BSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::vec& >::type psi_sq(psi_sqSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type zeta(zetaSEXP);
+    Rcpp::traits::input_parameter< double >::type tau_sq(tau_sqSEXP);
+    Rcpp::traits::input_parameter< double >::type phi(phiSEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type q(qSEXP);
+    Rcpp::traits::input_parameter< int >::type T(TSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type Ci(CiSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Si(SiSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type B(BSEXP);
+    rcpp_result_gen = Rcpp::wrap(update_B_GP_amplitude_cpp(psi_sq, zeta, tau_sq, phi, K, q, T, Ci, Si, B));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -477,6 +497,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_famr_update_psi_TPBN_cpp", (DL_FUNC) &_famr_update_psi_TPBN_cpp, 5},
     {"_famr_update_B_TPBN_cpp", (DL_FUNC) &_famr_update_B_TPBN_cpp, 6},
     {"_famr_update_B_GP_cpp", (DL_FUNC) &_famr_update_B_GP_cpp, 13},
+    {"_famr_update_B_GP_amplitude_cpp", (DL_FUNC) &_famr_update_B_GP_amplitude_cpp, 10},
     {"_famr_update_eta_mh_cpp", (DL_FUNC) &_famr_update_eta_mh_cpp, 25},
     {"_famr_rgig_cpp", (DL_FUNC) &_famr_rgig_cpp, 3},
     {"_famr_rig_cpp", (DL_FUNC) &_famr_rig_cpp, 1},

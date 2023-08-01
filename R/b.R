@@ -1,14 +1,14 @@
 # Transform eta for estimating the interaction matrix
-# Coefficients are order as : latent main effect, interactions between latent factors and covariates, covariates 
+# Coefficients are order as : interactions between latent factors and covariates, covariates 
 get_eta_int <- function(eta, K, Z, Z_int, id) {
   uid <- unique(id)
-  # Duplicate eta for repeated outcome measurements
+  # Duplicate eta for repeated outcome measurements: (Y_11,...Y_1T_1,...Y_nT_n)^T
   eta_dup <- eta[match(id, uid),,drop=F]
   if (is.null(colnames(eta_dup))) {
     colnames(eta_dup) <- paste0("e", 1:K)
   }
-  eta_int <- eta_dup
-  cnames <- colnames(eta_int)
+  eta_int <- c()
+  cnames <- c() #colnames(eta_int)
   if (!is.null(Z_int)) {
     if (is.null(colnames(Z_int))) {
       colnames(Z_int) <- paste0("zint", 1:ncol(Z_int))
@@ -31,6 +31,7 @@ get_eta_int <- function(eta, K, Z, Z_int, id) {
   return(eta_int)
 }
 
+# Use when there is NO random intercept
 update_B_TPBN <- function(prm, Y, X, K, Z, Z_int) {
   q <- ncol(Y)
   n <- nrow(Y)
@@ -50,18 +51,16 @@ update_B_TPBN <- function(prm, Y, X, K, Z, Z_int) {
               eta_int = eta_int))
 }
 
-# Use when there is random intercept
+# Use when there is random intercept and GP main effects
+# Updates linear regression matrices
 update_B_TPBN_re <- function(prm, Y, X, K, Z, Z_int) {
   q <- ncol(Y)
-  n <- nrow(Y)
+  n <- nrow(Y)  # number of observations total: sum_i T_i
   sinv <- 1/(1/prm$sigmay_sqinv + 1/prm$nu_sqinv)
   eta_int <- get_eta_int(prm$eta, K, Z, Z_int, prm$id)
   p <- ncol(eta_int)
-  alpha <- update_intercept(Y - eta_int %*% prm$B - prm$eta_quad %*% prm$Omega, 
-                            prm$Sigma/sinv)
-  Ytilde <- Y - tcrossprod(rep(1, n), prm$alpha) - 
-    prm$eta_quad %*% prm$Omega #-
-    # prm$xi[prm$numeric_id, ]
+  alpha <- update_intercept(Y - prm$Bt_eta - eta_int %*% prm$B, prm$Sigma/sinv)
+  Ytilde <- Y - tcrossprod(rep(1, n), alpha) - prm$Bt_eta
   Ytilde <- Ytilde * sqrt(sinv) #sqrt(prm$sigmay_sqinv)
   eta_int <- eta_int * sqrt(sinv) #sqrt(prm$sigmay_sqinv)
   B <- update_B_TPBN_cpp(eta_int, Ytilde, prm$Sigma, prm$psi, p, q)

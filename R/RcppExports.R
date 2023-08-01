@@ -37,6 +37,10 @@ update_B_GP_cpp <- function(Y, time, Bt_eta_k, eta, C_inv, psi, id, sinv, Sigma,
     .Call(`_famr_update_B_GP_cpp`, Y, time, Bt_eta_k, eta, C_inv, psi, id, sinv, Sigma, K, q, T, n)
 }
 
+update_B_GP_amplitude_cpp <- function(psi_sq, zeta, tau_sq, phi, K, q, T, Ci, Si, B) {
+    .Call(`_famr_update_B_GP_amplitude_cpp`, psi_sq, zeta, tau_sq, phi, K, q, T, Ci, Si, B)
+}
+
 update_eta_mh_cpp <- function(eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, K, p, t, n, q_int, n_accepted, eps, A, b, lpmf, s, adaptiveM = TRUE, adaptiveMWG = FALSE, batch_size = 50L) {
     invisible(.Call(`_famr_update_eta_mh_cpp`, eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, K, p, t, n, q_int, n_accepted, eps, A, b, lpmf, s, adaptiveM, adaptiveMWG, batch_size))
 }

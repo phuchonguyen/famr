@@ -41,8 +41,8 @@ update_B_GP_amplitude_cpp <- function(psi_sq, zeta, tau_sq, phi, K, q, T, Ci, Si
     .Call(`_famr_update_B_GP_amplitude_cpp`, psi_sq, zeta, tau_sq, phi, K, q, T, Ci, Si, B)
 }
 
-update_eta_mh_cpp <- function(eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, K, p, t, n, q_int, n_accepted, eps, A, b, lpmf, s, adaptiveM = TRUE, adaptiveMWG = FALSE, batch_size = 50L) {
-    invisible(.Call(`_famr_update_eta_mh_cpp`, eta, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, K, p, t, n, q_int, n_accepted, eps, A, b, lpmf, s, adaptiveM, adaptiveMWG, batch_size))
+update_eta_mh_cpp <- function(eta, Bt, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, time, K, p, q, n, p_int, n_accepted, eps, A, b, lpmf, s, adaptiveM = TRUE, adaptiveMWG = FALSE, batch_size = 50L) {
+    invisible(.Call(`_famr_update_eta_mh_cpp`, eta, Bt, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, time, K, p, q, n, p_int, n_accepted, eps, A, b, lpmf, s, adaptiveM, adaptiveMWG, batch_size))
 }
 
 rgig_cpp <- function(lam, psi, chi) {
@@ -51,6 +51,10 @@ rgig_cpp <- function(lam, psi, chi) {
 
 rig_cpp <- function(mu) {
     .Call(`_famr_rig_cpp`, mu)
+}
+
+ldinvgam <- function(x, a, b) {
+    .Call(`_famr_ldinvgam`, x, a, b)
 }
 
 submat_cpp <- function(M, idx, idy) {
@@ -67,6 +71,22 @@ impute_Ymis_cpp <- function(Y, M, Sigma, O, n, t) {
 
 impute_Yprobit_cpp <- function(Y, M, Sigma, Yraw, binary, n, t) {
     .Call(`_famr_impute_Yprobit_cpp`, Y, M, Sigma, Yraw, binary, n, t)
+}
+
+update_Lambda_cpp <- function(Lambda, U, Y, eta, S_inv, phi, tau, time, n, q, K, L) {
+    invisible(.Call(`_famr_update_Lambda_cpp`, Lambda, U, Y, eta, S_inv, phi, tau, time, n, q, K, L))
+}
+
+update_U_cpp <- function(U, Y, eta, Lambda, id, time, S_inv, C_inv, L, K, T, q, n) {
+    invisible(.Call(`_famr_update_U_cpp`, U, Y, eta, Lambda, id, time, S_inv, C_inv, L, K, T, q, n))
+}
+
+covEQ <- function(t, kappa, amplitude) {
+    .Call(`_famr_covEQ`, t, kappa, amplitude)
+}
+
+update_kappa_cpp <- function(kappa, Ci, C, logdetC, lpdf, time, U, a, b, L, K, eps, s, batch_size, n_accepted) {
+    invisible(.Call(`_famr_update_kappa_cpp`, kappa, Ci, C, logdetC, lpdf, time, U, a, b, L, K, eps, s, batch_size, n_accepted))
 }
 
 update_Omega_TPBN_cpp <- function(Omega, X, Y, Sigma, psi) {

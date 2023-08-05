@@ -48,23 +48,29 @@ update_sigmax_sqinv <- function(prm, X, K, s0=0.084, r=2.5) {
 }
 
 # When there is random intercepts
-update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, TT, binary) {
+update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, TT, binary, N) {
   p <- ncol(prm$eta_int) # number of linear predictor terms: interactions, main effects of covariates
   n <- nrow(Y) # number of observations total: sum_i T_i
   q <- ncol(Y)
-  Ytilde <- Y - tcrossprod(rep(1, n), prm$alpha) - prm$Bt_eta - prm$eta_int%*%prm$B
-  sinv <- 1/(1/prm$sigmay_sqinv + 1/prm$nu_sqinv)
-  YtY <- crossprod(Ytilde, Ytilde) * sinv #prm$sigmay_sqinv
-  BtB <- t(prm$B) %*% diag(1/prm$psi, p, p) %*% prm$B
-  # sum list of matrices element-wise
-  BttBt <- Reduce('+', lapply(1:K, function(k)
-    prm$Bt[k,,] %*% (prm$C_inv[[k]] / (prm$Bt_psi[k]*prm$Bt_tau)) %*% t(prm$Bt[k,,])
-    ))
   k1 <- 3
   k2 <- 10
-  S <- YtY + BtB + BttBt + k2*(diag(apply(Y, 2, var), q, q))
-  df <- n + K*TT + p + (q + k1)
-  tryCatch(solve(S), error=function(e) {print(S)})
+  Ytilde <- Y - tcrossprod(rep(1, n), prm$alpha) - prm$Bt_eta - prm$eta_int%*%prm$B
+  S0_inv <- chol2inv(chol(diag(1, TT, TT) + matrix(1, TT, TT)*0)) # TODO nu_sqinv
+  YtY <- Reduce('+', lapply(1:N, function(i)
+    t(Y[prm$numeric_id==i,]) %*% S0_inv %*% Y[prm$numeric_id==i,]
+    ))
+  # sinv <- 1/(1/prm$sigmay_sqinv + 1/prm$nu_sqinv)
+  # YtY <- crossprod(Ytilde, Ytilde) * sinv
+  BtB <- t(prm$B) %*% diag(1/prm$psi, p, p) %*% prm$B
+  # sum list of matrices element-wise
+  # BttBt <- Reduce('+', lapply(1:K, function(k)
+  #   prm$Bt[k,,] %*% (prm$C_inv[[k]] / (prm$Bt_psi[k]*prm$Bt_tau)) %*% t(prm$Bt[k,,])
+  #   ))
+  # S <- YtY + BtB + BttBt + k2*(diag(apply(Y, 2, var), q, q))
+  # df <- n + K*TT + p + (q + k1)
+  S <- YtY + BtB + k2*(diag(apply(Y, 2, var), q, q))
+  df <- n + p + (q + k1)
+  tryCatch(solve(S), error = function(e) {print(S)})
   # Sigma <- CholWishart::rInvWishart(1, df = df, Sigma = S)[,,1]
   Sigmainv <- tryCatch(MCMCpack::rwish(df, chol2inv(chol(S))), error=function(e){
     cat('\nwhile sampling Sigma using rwish():', message(e), '\n')

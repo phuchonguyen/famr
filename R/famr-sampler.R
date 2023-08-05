@@ -1,3 +1,4 @@
+# TODO: bug in update_intercept when Z=NULL and Z_int=NULL
 #' @id vector of length N, unique id of subjects, might contain duplicated id
 #' 
 #' @export
@@ -11,13 +12,17 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                  s0=0.084, r=2.5, verbose=FALSE, missing_Y=FALSE, binary=NULL,
                  eta=NULL, Theta=NULL, B=NULL, Sigma=NULL, sigmax_sqinv=NULL,
                  W=NULL, xi=NULL, sigmay_sqinv=NULL,
-                 random_intercept=FALSE
+                 random_intercept=FALSE,
+                 time=NULL, Bt=NULL, n_kappa_opts=10, time_pred=NULL,
+                 kappa_a=5.03, kappa_b=11.65,
+                 L=2, U=NULL, Lambda=NULL
                  ) {
-  
+  # stopifnot("K must be larger than 1" = K > 1)
   if (is.vector(Y)) Y <- matrix(Y, ncol = 1)
   if (nrow(Y) != nrow(X)) stop("Missmatched number of rows in Y and X")
   # when id=NULL, no repeated measurements of Y
-  if (is.null(id)) id <- 1:nrow(Y)
+  if (is.null(id)) id <- 1:nrow(Y) # assumes all subjects observed once
+  if (is.null(time)) time <- rep(1, nrow(Y)) # assumes all subjects observed once
   # reduce X to a unique subject per row (when there are repeated measurements of Y)
   # each subjet has ONE UNIQUE measurement of X
   X <- X[!duplicated(id), ]
@@ -26,11 +31,12 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   p <- ncol(X) # number of components in mixtures
   p_z <- ncol(Z) # number of covariates
   p_int <- ncol(Z_int) # number of covariates interacting with the mixture latent factors
+  TT <- length(unique(time)) # number of unique time point
 
   # Mean-centered X to remove intercepts in factor model
   Xmean <- colMeans(X)
   X <- scale(X, center = T, scale = F)
-  # If there are missing values in Y
+  # Indicator matrix dim=dim(Y) of if there are missing values in Y:
   O <- (!is.na(Y))*1 # indicators of observed Y
   if (missing_Y) { # initialize missing values to be zero
     Y[O == 0] <- 0
@@ -46,11 +52,12 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   prm <- list()
   prm[["id"]] <- id
   prm[["uid"]] <- unique(id)
+  # recode id as numbers from 1 to n
   prm[['numeric_id']] <- as.numeric(factor(prm$id, levels = prm$uid))
   prm[["lpmf"]] <- rep(-99999999, n) # log likelihood
-  # K_int is the total number of predictors including 
-  # the K factors, K*p_int interactions, and p_z covariates
-  K_int <- K + p_z + p_int*K
+  # K_int is the total number of linear predictors including 
+  # the K*p_int interactions, and p_z covariates
+  K_int <- p_z + p_int*K
   # ********************************************
   # outcome-specific intercept (needed for probit model)
   # ********************************************
@@ -58,7 +65,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   if (random_intercept) {
     prm[["xi"]] <- array(0, dim=c(n, q))
     prm[["nu_sqinv"]] <- rgamma(1, 2.5*0.5, 2.5*0.084*0.5) # between subject error
-    prm[["sigmay_sqinv"]] <- rgamma(1, 2.5*0.5, 2.5*0.084*0.5) # within subject error
+    prm[["sigmay_sqinv"]] <- 1 # within subject error
   }
   # ********************************************
   # TPBN prior on main effects of factors/covariates & interactions with covariates
@@ -71,6 +78,49 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   # *********************************************
   prm[["Sigma"]] <- diag(rgamma(q, 2, 1), q, q) # covariance of y_i
   prm[["Sigmainv"]] <- diag(1/diag(prm$Sigma), q, q)
+  # ********************************************
+  # GP prior on time-varying main effects of factors
+  # ********************************************
+  prm[["Bt"]] <- array(rnorm(q * K * TT, 0, 10), dim = c(K, q, TT))
+  # +++++++++++++++
+  # 'Matrix' GP using Kronecker product and matrix normal distribution
+  # Did not work well
+  # +++++++++++++++
+  prm[["Bt_eta"]] <- array(0, dim=dim(Y))
+  # prm[["Bt_zeta"]] <- 1/rgamma(K, 0.5, 1)
+  # prm[["Bt_phi"]] <- 1/rgamma(1, 0.5, 1)
+  # prm[["Bt_psi"]] <- 1/rgamma(K, 0.5, rate=1/prm$Bt_zeta) # shrinkage on rows of Bt
+  # prm[["Bt_tau"]] <- 1/rgamma(1, 0.5, rate=1/prm$Bt_phi) # global shrinkage for Bt
+  # +++++++++++++++
+  # Using factor model of independent GPs
+  # +++++++++++++++
+  prm[['Bt_Lambda']] <- matrix(rnorm(q * L), q, L)
+  prm[['Bt_phi']] <- array(rgamma(q * L, 1), dim = c(q, L)) # local shrinkage for Theta
+  prm[["Bt_delta"]] <- rgamma(L, 1) # global shrinkage param for factor K
+  prm[['Bt_a1']] <- 2.1
+  prm[['Bt_a2']] <- 3.1
+  prm[['Bt_U']] <- array(rnorm(L * K * TT), dim = c(L, K, TT))
+  # ***** Length-scale for GP *************************
+  # From Kelly Moran's code: https://github.com/kelrenmor/bs3fa/tree/master
+  # er_to_kappa <- function(er){sqrt(er/6)} # function to go from effective range to length scale kappa
+  # is parameterized as sig^2 exp(-0.5 ||d-d'||^2 / kappa ^2)
+  # For sig^2 exp(-phi ||d-d'||^2), back of envelope is effective range is 3/phi
+  # phi = 0.5 l^(-2) ----> 3/phi = 6 l^2 (small ranges, i.e. smaller than range of data, cause issues)
+  # so l = (effective_range / 6) ^(0.5)
+  # er_min <- 1/(TT-1) + 1e-2 # corresponds to minimum effective range
+  # er_max <- 1 - 1e-2 # corresponds roughly to eff range spanning all data
+  # kappa_opts <- seq(er_to_kappa(er_min), er_to_kappa(er_max), length.out=n_kappa_opts)
+  # kappa_opts <- seq(1 + 1e-2, 10 - 1e-2, length.out=n_kappa_opts) # TODO
+  # C_all <- lapply(kappa_opts, function(l) make_cov(unique(time), EQ_kernel_vec, kappa=l, amplitude=1))
+  # Ci_all <- lapply(C_all, function(V) chol2inv(chol(V))) # avoid using solve because numerical instability can make Ci not symmetric
+  # ldetC_all <- lapply(C_all, function(V) log(det(V)))
+  prm[["kappa"]] <- 1/rgamma(1, kappa_a, kappa_b) #lapply(1:K, function(i) kappa_opts[n_kappa_opts %/% 2])
+  prm[["C"]] <- covEQ(1:TT, prm$kappa, 1) #lapply(1:K, function(i) C_all[[n_kappa_opts %/% 2]])
+  prm[["C_inv"]] <- chol2inv(chol(prm$C)) #lapply(1:K, function(i) Ci_all[[n_kappa_opts %/% 2]])
+  prm[["logdetC"]] <- log(det(prm$C))
+  kappa_lpdf <- -Inf
+  kappa_eps <- 1 # set to half of the largest and smallest distance
+  kappa_n_accepted <- 0
   # ********************************************
   # Factor model
   # ********************************************
@@ -125,16 +175,19 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   if (is.null(nwarmup)) {
     nwarmup <- round(niter/2) 
   }
-  sims <- list(B = array(NA, dim=c(niter - nwarmup, K_int, q)),
-               Bx = array(NA, dim=c(niter - nwarmup, p, q)),
+  sims <- list(B = array(NA, dim=c(niter - nwarmup, K, q, TT)),
+               Bx = array(NA, dim=c(niter - nwarmup, p, q, TT)),
                psi = array(NA, dim=c(niter - nwarmup, K_int)),
-               # b0 = array(NA, dim=c(niter - nwarmup, K_int)),
-               # b0x = array(NA, dim=c(niter - nwarmup, p)), # main effect only
-               # alpha = array(NA, dim=c(niter - nwarmup, q)), # outcome-specific intercept
+               Lambda = array(NA, dim=c(niter - nwarmup, q, L)),
+               # Bt_psi = array(NA,  dim=c(niter - nwarmup, K)),
+               Bt_tau = array(NA,  dim=c(niter - nwarmup, L)),
+               Bt_kappa = array(NA,  dim=c(niter - nwarmup, K)),
                Sigma = array(NA, dim = c(niter - nwarmup, q, q)),
                nu_sqinv = matrix(NA, niter - nwarmup, 1),
                Theta = array(NA, dim = c(niter - nwarmup, p, K)),
-               # eta = array(NA, dim = c(niter - nwarmup, n, K)),
+               Theta_tau = array(NA, dim = c(niter - nwarmup, K)),
+               alpha = array(NA, dim=c(niter - nwarmup, q)),
+               eta = array(NA, dim = c(niter - nwarmup, n, K)),
                sigmax_sqinv = array(NA, dim = c(niter - nwarmup, p)),
                p_eta_accept = c(),
                eta_eps = c(),
@@ -180,31 +233,137 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
     if (random_intercept) {
       ## eta using Adaptive Metropolis-within-Gibbs -----------------------------
       if (is.null(eta)) {
+        # TODO: Update Ytilda to use time-varying main effects B(t)
         prm <- update_eta_mh_re(prm, Y, 
-                                X, Z, Z_int, n, K, p, q, p_z, p_int,
+                                X, Z, Z_int, time,
+                                n, K, p, q, p_z, p_int,
                                 s, adaptiveM = ((s>n_till_adaptive) & adaptiveM),
                                 adaptiveMWG = adaptiveMWG,
                                 adaptiveMWG_batch = adaptiveMWG_batch)
       } else {
-        prm[['eta']] <- eta
+        prm[['eta']] <- eta # TODO: FOR DEBUGGING
       }
       ## Outcome regression ----------------------------------------------------
-      tmp <- update_B_TPBN_re(prm, Y, X, K, Z, Z_int)
-      prm[names(tmp)] <- tmp
-      ## Factor interactions ---------------------------------------------------
-      if (include_interactions) { # TODO
-        tmp <- update_Omega(prm, Y - prm$ri, X, K, Z, Z_int, O3, O3_is_col_na)
+      # B_TPBN: update step for linear coefficient effects
+      if (is.null(B)) {
+        tmp <- tryCatch(update_B_TPBN_re(prm, Y, X, K, Z, Z_int),
+                        error=function(e) {
+                          cat('\nerror while sampling B TPBN:', message(e), '\n')
+                        })
         prm[names(tmp)] <- tmp
+      } else {
+        prm[['B']] <- B
+        prm[['alpha']] <- rep(0, q)
       }
+      # B_GP: update step for coefficient functions of time
+      if (is.null(Bt)) {
+        if (is.null(Lambda)) {
+          prm <- update_Lambda(Y, time, K, L, q, prm)
+        } else {
+          prm[['Bt_Lambda']] <- Lambda
+        }
+        if (is.null(U)) {
+          prm <- update_U(prm, Y, time, K, L, q, TT, n)
+        } else {
+          prm[['Bt_U']] <- U
+        }
+        for (kk in 1:K) {
+          prm[['Bt']][kk,,] <- prm$Bt_Lambda %*% prm$Bt_U[,kk,]
+        }
+        # +++++++++++++++++++++++++++++++++++
+        #
+        # Gibbs step for main effect functions
+        # tmp <- update_B_GP(prm, Y, time, K, q, TT, n)
+        # prm[names(tmp)] <- tmp
+        # prm[['Bt_psi']] <- rep(1, K)
+        # prm[['Bt_tau']] <- 1
+        # tauphi <- update_B_GP_amplitude_cpp(prm$Bt_psi, prm$Bt_zeta,
+        #                                     prm$Bt_tau, prm$Bt_phi, K, q, TT,
+        #                                     abind::abind(prm$C_inv, along=3),
+        #                                     prm$Sigmainv,
+        #                                     aperm(prm$Bt, c(2, 3, 1))) # convert B from a (K, q, TT) to a (q, TT, K) array
+        # prm[['Bt_tau']] <- tauphi[1]
+        # prm[['Bt_phi']] <- tauphi[2]
+        # # Update wavelength kappa with NUTS
+        # kappa_f <- get_cur_kappa_f(unique(time), EQ_kernel_vec,
+        #                            prm$Bt, prm$Sigmainv, q, K)
+        # tmp <- mcnuts::nuts_iteration(prm$kappa,
+        #                               kappa_f$log_p, kappa_f$gradient,
+        #                               kappa_eps,
+        #                               warmup = (s <= nwarmup),
+        #                               M = c(1), verbose = FALSE,
+        #                               t = s,
+        #                               epsilon_bar = kappa_eps_bar, H = kappa_H,
+        #                               # parameters for adapting kappa_eps
+        #                               gamma = 0.05, t0 = 10, kappa = 0.75,
+        #                               delta = 0.65, mu_eps = kappa_mu_eps
+        # )
+        # print(tmp$th)
+        # prm[['kappa']] <- tmp$th
+        # prm[["C"]] <- make_cov(unique(time), EQ_kernel_vec, kappa=prm$kappa, amplitude=1)
+        # prm[["C_inv"]] <- solve(prm$C)
+        # # While warmup is true, kappa_eps is adapted, o.w. kappa_eps = kappa_eps_bar
+        # kappa_eps <- tmp$epsilon
+        # kappa_eps_bar <- tmp$epsilon_bar
+        # kappa_H <- tmp$H
+        
+        # Update length-scale kappa using Bayes factor over a set of plausible values
+        # which_ls <- lapply(1:K, function(k) {
+        #   update_kappa_discrete(Ci_all, ldetC_all, prm$Bt[k,,,drop=F],
+        #                         prm$Sigmainv, prm$Bt_psi*prm$Bt_tau,
+        #                         q, 1, n_kappa_opts)
+        # })
+        # prm[['kappa']] <- lapply(which_ls, function(ls) kappa_opts[ls])
+        # prm[['C']] <- lapply(which_ls, function(ls) C_all[[ls]])
+        # prm[['C_inv']] <- lapply(which_ls, function(ls) Ci_all[[ls]])
+      } else {
+        # prm[['Bt']] <- Bt
+        # prm[['Bt_psi']] <- rep(1, K)
+        # prm[['Bt_tau']] <- 1
+        # tauphi <- update_B_GP_amplitude_cpp(prm$Bt_psi, prm$Bt_zeta,
+        #                                     prm$Bt_tau, prm$Bt_phi, K, q, TT,
+        #                                     abind::abind(prm$C_inv, along=3), 
+        #                                     prm$Sigmainv,
+        #                                     aperm(prm$Bt, c(2, 3, 1))) # convert B from a (K, q, TT) to a (q, TT, K) array
+        # prm[['Bt_tau']] <- tauphi[1]
+        # prm[['Bt_phi']] <- tauphi[2]
+        # which_ls <- lapply(1:K, function(k) {
+        #   update_kappa_discrete(Ci_all, ldetC_all, prm$Bt[k,,,drop=F],
+        #                         prm$Sigmainv, prm$Bt_psi*prm$Bt_tau,
+        #                         q, 1, n_kappa_opts)
+        # })
+        # prm[['kappa']] <- lapply(which_ls, function(ls) kappa_opts[ls])
+        # prm[['C']] <- lapply(which_ls, function(ls) C_all[[ls]])
+        # prm[['C_inv']] <- lapply(which_ls, function(ls) Ci_all[[ls]])
+      }
+      prm[['Bt_eta']] <- sapply(1:nrow(Y), function(i) 
+        prm$eta[prm$numeric_id[i],] %*% prm$Bt[,,time[i]]) %>% t()
+      if (q == 1) {
+        prm[['Bt_eta']] <- matrix(prm[['Bt_eta']], nrow=nrow(Y), ncol=ncol(Y))
+      }
+      stopifnot(dim(prm[['Bt_eta']]) == dim(Y))
+      ## Factor interactions ---------------------------------------------------
+      # if (include_interactions) { # TODO
+      #   tmp <- update_Omega(prm, Y - prm$ri, X, K, Z, Z_int, O3, O3_is_col_na)
+      #   prm[names(tmp)] <- tmp
+      # }
       ## Random intercept ------------------------------------------------------
       if (is.null(xi)) {
-        prm <- update_random_intercept(prm, Y) 
+        prm <- update_random_intercept(prm, Y)
       } else {
-        prm[["xi"]] <- xi
+        prm[["xi"]] <- xi # TODO: FOR DEBUGGING
+        # a <- 3.2 + length(prm$uid)/2
+        # b <- 1/50 + sum(apply(prm$xi, 1, function(x) t(x) %*% prm$Sigmainv %*% x))/2
+        # prm$nu_sqinv <- rgamma(1, shape=a, rate=b)
       }
       ## Outcome covariance ----------------------------------------------------
-      tmp <- update_Sigma_IW_TPBN_re(prm, Y, Z, Z_int, K, binary)
-      prm[names(tmp)] <- tmp
+      if (is.null(Sigma)) {
+        tmp <- update_Sigma_IW_TPBN_re(prm, Y, Z, Z_int, K, TT, binary, n)
+        prm[names(tmp)] <- tmp
+      } else {
+        prm[['Sigma']] <- Sigma
+        prm[['Sigmainv']] <- chol2inv(chol(Sigma))
+      }
     ## Model without decomposing the noise variance into between individual variances
     # and within individual variances
     } else {
@@ -248,11 +407,14 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                                     mean(prm$eta_n_accepted/adaptiveMWG_batch))
         sims[["eta_eps"]] <- rbind(sims[["eta_eps"]], prm$eta_eps)
       }
+      sims[["eta"]][s-nwarmup,,] <- prm$eta
       sims[["sigmax_sqinv"]][s-nwarmup, ] <- prm$sigmax_sqinv
       sims[["Theta"]][s-nwarmup, , ] <- prm$Theta
-      # sims[["eta"]][s-nwarmup, , ] <- prm$eta
-      # sims[["b0"]][s-nwarmup, ] <- prm$b0
-      # sims[["alpha"]][s-nwarmup, ] <- prm$alpha
+      sims[["Theta_tau"]][s-nwarmup, ] <- cumprod(prm$delta)
+      sims[["alpha"]][s-nwarmup, ] <- prm$alpha
+      sims[['Bt_kappa']][s-nwarmup, ] <- unlist(prm$kappa)
+      sims[['Bt_tau']][s-nwarmup, ] <- cumprod(prm$Bt_delta)
+      sims[['Lambda']][s-nwarmup,,] <- prm$Bt_Lambda
       
       # Rescaling for probit latent variables
       # scale_B <- prm$B
@@ -267,52 +429,49 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
       #   # Scale B
       #   scale_B[, binary == 1] <- sweep(prm$B[, binary == 1, drop=FALSE], 2, temp_s, '/')
       # }
-      sims[["B"]][s-nwarmup, , ] <- prm$B
-      sims[['psi']][s-nwarmup, ] <- prm$psi
+      sims[["B"]][s-nwarmup, , ,] <- prm$Bt
+      if (p_int + p_z > 0) {
+        sims[['psi']][s-nwarmup, ] <- prm$psi
+      }
       sims[["Sigma"]][s-nwarmup, , ] <- prm$Sigma
       if (random_intercept) {
         sims[['nu_sqinv']][s-nwarmup, ] <- prm$nu_sqinv
       }
       
-      # Effects in original predictors
+      # transformation to convert latent factor effects to effects in original predictors
       V <- solve(t(prm$Theta) %*% diag(prm$sigmax_sqinv, p, p) %*% prm$Theta + diag(1, K, K))
-      Ax <- V %*% t(prm$Theta) %*% diag(prm$sigmax_sqinv, p, p)
-      sims[["Bx"]][s-nwarmup, , ] <- t(crossprod(prm$B[1:K,,drop=F], Ax))
-      temp_Bx <- sims[["Bx"]][s-nwarmup, , ]
-      if (p_int > 0) {
-        for (i in 1:p_int) {
-          start_idx <- i*K + 1
-          end_idx <- i*K + K
-          sims[["Bxz"]][s-nwarmup, i, , ] <- t(crossprod(prm$B[start_idx:end_idx,,drop=F], Ax))
-          temp_Bx <- rbind(temp_Bx, sims[["Bxz"]][s-nwarmup, i, , ])
+      Ax <- V %*% t(prm$Theta) %*% diag(prm$sigmax_sqinv, p, p) # K \times p
+      # TODO Update so that Bx is a (p * q * TT) array
+      for (tt in 1:TT) {
+        if (K > 1) {
+          sims[["Bx"]][s-nwarmup, , , tt] <- t(crossprod(prm$Bt[,,tt], Ax)) 
+        } else {
+          sims[["Bx"]][s-nwarmup, , , tt] <- t(prm$Bt[,,tt] %*% Ax)
         }
       }
+      # variable to store all linear effects
+      temp_Bxz <- c()
+      # linear interaction between chemicals and covariates in original predictors
+      if (p_int > 0) {
+        for (i in 1:p_int) {
+          start_idx <- (i-1)*K + 1
+          end_idx <- (i-1)*K + K
+          sims[["Bxz"]][s-nwarmup, i, , ] <- t(crossprod(prm$B[start_idx:end_idx,,drop=F], Ax))
+          temp_Bxz <- rbind(temp_Bxz, sims[["Bxz"]][s-nwarmup, i, , ])
+        }
+      }
+      # Linear main effects of covariates
       if (p_z > 0) {
         sims[["Bz"]][s-nwarmup, , ] <- prm$B[(K_int-p_z+1):K_int,]
-        temp_Bx <- rbind(temp_Bx, sims[["Bz"]][s-nwarmup, , ])
+        temp_Bxz <- rbind(temp_Bxz, sims[["Bz"]][s-nwarmup, , ])
       }
-      stopifnot(dim(temp_Bx) == c(p+p*p_int+p_z, q))
+      # TODO: doesn't work when q = 1
+      stopifnot(dim(temp_Bxz) == c(p*p_int+p_z, q))
       
-      if (include_interactions) {
-        sims[["psir"]][s-nwarmup,] <- prm$Omega_psir
-        sims[["psic"]][s-nwarmup,] <- prm$Omega_psic
-        # zero out NAs
-        prm[["Omega_tensor"]]@data[is.na(prm$Omega_tensor@data)] <- 0
-        # k-mode tensor multiplication to transform this into coefs in X
-        tmp_Omega <- rTensor::ttl(prm[["Omega_tensor"]], 
-                                  list(t(Ax), t(Ax)), 
-                                  c(2, 3))@data
-        sims[["Omega_array_x"]][s-nwarmup,,,] <- abind::abind(
-          apply(tmp_Omega,
-                1,
-                function(x) (x+t(x))/2,
-                simplify = F),
-          along = -1)
-      }
-      
-      # Fitted values for Y
+      # Fitted outcome values for observed data
       if (include_rep) {
         Y_rep <- tcrossprod(rep(1, nrow(Y)), prm$alpha) + 
+          prm$Bt_eta +
           prm$eta_int %*% prm$B +
           MASS::mvrnorm(nrow(Y), rep(0,q), prm$Sigma)
         if (include_interactions) {
@@ -327,10 +486,13 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         sims[["Y_rep"]][s-nwarmup, , ] <- Y_rep
       }
       
-      # Prediction for new data: returns E(y_i | x_i)
+      # Predicted outcomes for new data: returns E(y_i | x_i)
       if (!is.null(X_pred)) {
-        Y_pred <- tcrossprod(rep(1, nrow(X_pred)), prm$alpha) + 
-          X_pred_int %*% temp_Bx
+        Y_pred <- tcrossprod(rep(1, nrow(X_pred)), prm$alpha) +
+          X_pred_int %*% temp_Bxz +
+          sapply(1:nrow(X_pred), function(i) {
+          t(X_pred[i,]) %*% sims[["Bx"]][s-nwarmup,,,time_pred[i]]
+          }) %>% t()
         if (include_interactions) {
           trOV <- sapply(1:q, function(l) sum(diag(prm[["Omega_tensor"]]@data[l,,] %*% V)))
           Y_pred <- Y_pred + tcrossprod(rep(1, nrow(X_pred)), trOV)
@@ -351,5 +513,6 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                 round(prm$a1_n_accepted/niter, 3)))
   message(paste("\nMetropolis-Hasting acceptance prob. of a2 is",
                 round(prm$a2_n_accepted/niter, 3)))
+  cat('\nGP length scale kappa =', paste(prm$kappa, sep=" "), '\n')
   return(sims)
 }

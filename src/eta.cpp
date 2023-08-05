@@ -7,34 +7,35 @@ using namespace std;
 using namespace arma;
 
 // a (t, K) matrix B^T + \sum_l z_{il}C^T_l
-void get_Aij(arma::mat& Aij, const arma::mat& B, int K, int t, int q_int = 0, 
+void get_Aij(arma::mat& Aij, const arma::cube Bt, const arma::mat& B, 
+             int t, int K, int q, int p_int = 0, 
              const arma::rowvec& z_int = zeros<arma::rowvec>(0)) {
-  Aij = B.submat(0, 0, K - 1, t - 1);
+  Aij = Bt.slice(t);
   int s;
   int e;
-  for (int l = 0; l < q_int; l++) {
-    s = K * (l + 1);
-    e = K * (l + 2) - 1;
-    Aij += B.submat(s, 0, e, t - 1) * z_int(l);
+  for (int l = 0; l < p_int; l++) {
+    s = K * l;
+    e = K * (l + 1) - 1;
+    Aij += B.submat(s, 0, e, q - 1) * z_int(l);
   }
 }
 
 void get_Si_mi(arma::mat& Si, arma::mat& Ri, arma::vec& mi, arma::vec& ti,
-               const arma::mat& B, const arma::mat& Theta,
+               const arma::cube Bt, const arma::mat& B, const arma::mat& Theta,
                const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv,
                const arma::mat& Y, const arma::rowvec& xi, 
-               const arma::mat& Z_int, const arma::uvec& idi, 
-               int t, int K, int q_int) {
-  arma::mat Aij(K, t);
-  arma::rowvec yij(t);
+               const arma::mat& Z_int, const arma::uvec& idi, const arma::uvec& time,
+               int q, int K, int p_int) {
+  arma::mat Aij(K, q);
+  arma::rowvec yij(q);
   arma::mat Theta_sigmax = Theta.each_col() % sigmax_sqinv;
   // loop through repeated outcome measurements for subject i
   for (int j = 0; j < (int) idi.n_elem; j++) {
     // coefficient matrix when factor interacts with covariates
-    if (q_int > 0) {
-      get_Aij(Aij, B, K, t, q_int, Z_int.row(idi(j)));
+    if (p_int > 0) {
+      get_Aij(Aij, Bt, B, time(idi(j)), K, q, p_int, Z_int.row(idi(j)));
     } else {
-      get_Aij(Aij, B, K, t);
+      get_Aij(Aij, Bt, B, time(idi(j)), K, q);
     }
     yij = Y.row(idi(j));
     // contribution of Y to likelihood
@@ -67,35 +68,38 @@ arma::vec get_Omega_tilde(const arma::cube& Omega, const arma::rowvec& etai, int
 }
 
 // log likelihood of latent factors for one subject i
-double llike(const arma::rowvec& etai,
+double llike(const arma::rowvec& etai, const arma::cube Bt,
              const arma::mat& B, const arma::mat& Theta, const arma::cube& Omega,
              const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv,
              const arma::mat& Y, const arma::rowvec& xi, 
-             const arma::mat& Z_int, const arma::uvec& idi, 
-             int t, int K, int q_int, int p) {
+             const arma::mat& Z_int, const arma::uvec& idi, const arma::uvec& time,
+             int q, int K, int p_int, int p) {
   arma::mat Si(K, K, fill::zeros);
-  arma::mat Ri(t, K, fill::zeros);
+  arma::mat Ri(q, K, fill::zeros);
   arma::vec mi(K, fill::zeros);
-  arma::vec ti(t, fill::zeros);
-  get_Si_mi(Si, Ri, mi, ti, B, Theta, Sigmay_inv, sigmax_sqinv,
-            Y, xi, Z_int, idi, t, K, q_int);
-  arma::vec Oi = get_Omega_tilde(Omega, etai, t);
+  arma::vec ti(q, fill::zeros);
+  get_Si_mi(Si, Ri, mi, ti, Bt, B, Theta, Sigmay_inv, sigmax_sqinv,
+            Y, xi, Z_int, idi, time, q, K, p_int);
+  arma::vec Oi = get_Omega_tilde(Omega, etai, q);
   arma::rowvec OS = Oi.t()*Sigmay_inv;
-  return as_scalar(-0.5*log(2*M_PI)*(t*idi.n_elem + p) + 
+  return as_scalar(-0.5*log(2*M_PI)*(q*idi.n_elem + p) + 
                    0.5*log(sum(sigmax_sqinv)) + 
                    idi.n_elem*0.5*log(det(Sigmay_inv)) +
                    -0.5*etai*Si*etai.t() + etai*mi +
                    OS*ti - OS*Ri*etai.t() - 0.5*OS*Oi);
 }
 
+// Bt: K x q x T array
 // [[Rcpp::export]]
-void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Theta,
+void update_eta_mh_cpp(arma::mat& eta, const arma::cube Bt,
+                       const arma::mat& B, const arma::mat& Theta,
                        const arma::cube& Omega,
                        const arma::mat& Sigmay_inv, const arma::vec& sigmax_sqinv,
                        const arma::mat& Y, const arma::mat& X,
                        const arma::mat& Z_int,
                        const arma::vec& uid, const arma::vec& id,
-                       int K, int p, int t, int n, int q_int,
+                       const arma::uvec& time,
+                       int K, int p, int q, int n, int p_int,
                        arma::vec& n_accepted, arma::vec& eps,
                        arma::cube& A, arma::mat& b, 
                        arma::vec& lpmf, int s,
@@ -139,11 +143,11 @@ void update_eta_mh_cpp(arma::mat& eta, const arma::mat& B, const arma::mat& Thet
       prop = eta.row(i) + std::exp(2*eps(i)) * randn<rowvec>(K);
     }
     // log likelihood of the proposal
-    llike_prop = llike(prop, B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
-                       Y, X.row(i), Z_int, idi, t, K, q_int, p);
+    llike_prop = llike(prop, Bt, B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
+                       Y, X.row(i), Z_int, idi, time, q, K, p_int, p);
     // log likelihood of the current state
     // llike_cur = llike(eta.row(i), B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
-    //                   Y, X.row(i), Z_int, idi, t, K, q_int, p);
+    //                   Y, X.row(i), Z_int, idi, time, q, K, p_int, p);
     llike_cur = lpmf(i);
     // log acceptance probability
     logr = llike_prop + lprior(prop, K) - llike_cur - lprior(eta.row(i), K);

@@ -85,8 +85,12 @@ covEQ <- function(t, kappa, amplitude) {
     .Call(`_famr_covEQ`, t, kappa, amplitude)
 }
 
+llike_kappa <- function(Ci, logdetC, U, L, K) {
+    .Call(`_famr_llike_kappa`, Ci, logdetC, U, L, K)
+}
+
 update_kappa_cpp <- function(kappa, Ci, C, logdetC, lpdf, time, U, a, b, L, K, eps, s, batch_size, n_accepted) {
-    invisible(.Call(`_famr_update_kappa_cpp`, kappa, Ci, C, logdetC, lpdf, time, U, a, b, L, K, eps, s, batch_size, n_accepted))
+    .Call(`_famr_update_kappa_cpp`, kappa, Ci, C, logdetC, lpdf, time, U, a, b, L, K, eps, s, batch_size, n_accepted)
 }
 
 update_Omega_TPBN_cpp <- function(Omega, X, Y, Sigma, psi) {

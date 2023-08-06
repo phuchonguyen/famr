@@ -110,17 +110,17 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   # er_min <- 1/(TT-1) + 1e-2 # corresponds to minimum effective range
   # er_max <- 1 - 1e-2 # corresponds roughly to eff range spanning all data
   # kappa_opts <- seq(er_to_kappa(er_min), er_to_kappa(er_max), length.out=n_kappa_opts)
-  # kappa_opts <- seq(1 + 1e-2, 10 - 1e-2, length.out=n_kappa_opts) # TODO
-  # C_all <- lapply(kappa_opts, function(l) make_cov(unique(time), EQ_kernel_vec, kappa=l, amplitude=1))
-  # Ci_all <- lapply(C_all, function(V) chol2inv(chol(V))) # avoid using solve because numerical instability can make Ci not symmetric
-  # ldetC_all <- lapply(C_all, function(V) log(det(V)))
-  prm[["kappa"]] <- 1/rgamma(1, kappa_a, kappa_b) #lapply(1:K, function(i) kappa_opts[n_kappa_opts %/% 2])
+  kappa_opts <- seq(1 + 1e-2, 10 - 1e-2, length.out=n_kappa_opts) # TODO
+  C_all <- lapply(kappa_opts, function(l) covEQ(1:TT, kappa=l, amplitude=1))
+  Ci_all <- lapply(C_all, function(V) chol2inv(chol(V))) # avoid using solve because numerical instability can make Ci not symmetric
+  ldetC_all <- lapply(C_all, function(V) log(det(V)))
+  prm[["kappa"]] <- kappa_opts[n_kappa_opts %/% 2] #lapply(1:K, function(i) kappa_opts[n_kappa_opts %/% 2])
   prm[["C"]] <- covEQ(1:TT, prm$kappa, 1) #lapply(1:K, function(i) C_all[[n_kappa_opts %/% 2]])
   prm[["C_inv"]] <- chol2inv(chol(prm$C)) #lapply(1:K, function(i) Ci_all[[n_kappa_opts %/% 2]])
   prm[["logdetC"]] <- log(det(prm$C))
-  kappa_lpdf <- -Inf
-  kappa_eps <- 1 # set to half of the largest and smallest distance
-  kappa_n_accepted <- 0
+  prm[["kappa_lpdf"]] <- -99999999
+  prm[['kappa_eps']] <- 0.5 # range is exp(exp(2*0.5))=800x or exp(-exp(2*0.5))=1/800x of kappa
+  prm[['kappa_n_accepted']] <- 0
   # ********************************************
   # Factor model
   # ********************************************
@@ -181,7 +181,8 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                Lambda = array(NA, dim=c(niter - nwarmup, q, L)),
                # Bt_psi = array(NA,  dim=c(niter - nwarmup, K)),
                Bt_tau = array(NA,  dim=c(niter - nwarmup, L)),
-               Bt_kappa = array(NA,  dim=c(niter - nwarmup, K)),
+               Bt_kappa = array(NA,  dim=c(niter - nwarmup, 1)),
+               kappa_eps = array(NA,  dim=c(niter - nwarmup, 1)),
                Sigma = array(NA, dim = c(niter - nwarmup, q, q)),
                nu_sqinv = matrix(NA, niter - nwarmup, 1),
                Theta = array(NA, dim = c(niter - nwarmup, p, K)),
@@ -270,6 +271,11 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         for (kk in 1:K) {
           prm[['Bt']][kk,,] <- prm$Bt_Lambda %*% prm$Bt_U[,kk,]
         }
+        tmp <- update_kappa_cpp(prm$kappa, prm$C_inv, prm$C, prm$logdetC,
+                                prm$kappa_lpdf, 1:TT, prm$Bt_U, kappa_a, kappa_b,
+                                L, K, prm$kappa_eps, s, adaptiveMWG_batch,
+                                prm$kappa_n_accepted)
+        prm[names(tmp)] <- tmp
         # +++++++++++++++++++++++++++++++++++
         #
         # Gibbs step for main effect functions
@@ -307,15 +313,12 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         # kappa_eps_bar <- tmp$epsilon_bar
         # kappa_H <- tmp$H
         
-        # Update length-scale kappa using Bayes factor over a set of plausible values
-        # which_ls <- lapply(1:K, function(k) {
-        #   update_kappa_discrete(Ci_all, ldetC_all, prm$Bt[k,,,drop=F],
-        #                         prm$Sigmainv, prm$Bt_psi*prm$Bt_tau,
-        #                         q, 1, n_kappa_opts)
-        # })
-        # prm[['kappa']] <- lapply(which_ls, function(ls) kappa_opts[ls])
-        # prm[['C']] <- lapply(which_ls, function(ls) C_all[[ls]])
-        # prm[['C_inv']] <- lapply(which_ls, function(ls) Ci_all[[ls]])
+        #Update length-scale kappa using Bayes factor over a set of plausible values
+        # which_ls <- update_kappa_discrete(Ci_all, ldetC_all, prm$Bt_U,
+        #                                  L, K, n_kappa_opts)
+        # prm[['kappa']] <- kappa_opts[which_ls]
+        # prm[['C']] <- C_all[[which_ls]]
+        # prm[['C_inv']] <- Ci_all[[which_ls]]
       } else {
         # prm[['Bt']] <- Bt
         # prm[['Bt_psi']] <- rep(1, K)
@@ -414,6 +417,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
       sims[["alpha"]][s-nwarmup, ] <- prm$alpha
       sims[['Bt_kappa']][s-nwarmup, ] <- unlist(prm$kappa)
       sims[['Bt_tau']][s-nwarmup, ] <- cumprod(prm$Bt_delta)
+      sims[['kappa_eps']][s-nwarmup, ] <- prm$kappa_eps
       sims[['Lambda']][s-nwarmup,,] <- prm$Bt_Lambda
       
       # Rescaling for probit latent variables

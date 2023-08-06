@@ -143,14 +143,15 @@ arma::mat covEQ(arma::vec t, double kappa, double amplitude) {
   arma::mat C(D, D);
   for (int i = 0; i < D; i++) {
     for (int j = 0; j < D; j++) {
-      C(i, j) = exp(-0.5 * pow( abs(t(i) - t(j)), 1.9999) / kappa); // for stability
+      C(i, j) = exp(-0.5 * pow( abs(t(i) - t(j)), 1.9999) / pow(kappa, 2)); // for stability
       C(j, i) = C(i, j);
       if (i == j) {C(i, j) = 1.0;}
     }
   }
-  return C;
+  return amplitude * C;
 }
 
+// [[Rcpp::export]]
 double llike_kappa(const arma::mat& Ci, double logdetC, const arma::cube& U,
                    int L, int K) {
   double s = 0;
@@ -167,12 +168,13 @@ double llike_kappa(const arma::mat& Ci, double logdetC, const arma::cube& U,
 
 // time: all unique time points
 // [[Rcpp::export]]
-void update_kappa_cpp(double &kappa, arma::mat& Ci, arma::mat& C,
-                      double &logdetC, double &lpdf, arma::vec time,
+Rcpp::List update_kappa_cpp(double kappa , arma::mat& Ci, arma::mat& C, 
+                      double logdetC, double lpdf, arma::vec time,
                       const arma::cube& U, double a, double b, int L, int K,
-                      double &eps, int s, int batch_size, int &n_accepted) {
+                      double eps, int s, int batch_size, int n_accepted) {
+  
   // update scaling parameter every batch_size iterations
-  if ((s-1) % batch_size == 0) { // minus 1 because R index starts at 1
+  if ((s - 1) % batch_size == 0) { // minus 1 because R index starts at 1
     double d = min(0.05, std::pow((int)s/batch_size, -0.5));
     // 0.44 is theoretically optimal acceptance rate for the latest 50 interations
     if ((n_accepted / batch_size) > 0.44) {
@@ -183,10 +185,11 @@ void update_kappa_cpp(double &kappa, arma::mat& Ci, arma::mat& C,
     // reset acceptances counter
     n_accepted = 0;
   }
-  double prop = kappa + std::exp(2*eps) * randn<double>();
+  // sample proposal on log scale gives better mixing and makes prop >= 0
+  double prop = exp( log(kappa) + std::exp(2*eps) * randn<double>());
   arma::mat C_prop = covEQ(time, prop, 1);
   arma::mat Ci_prop = C_prop.i();
-  double logdetC_prop = log_det_sympd(C_prop);
+  double logdetC_prop = log(det(C_prop));
   double l_prop = llike_kappa(Ci_prop, logdetC_prop, U, L, K);
   l_prop += ldinvgam(prop, a, b);
   // log acceptance probability
@@ -199,5 +202,14 @@ void update_kappa_cpp(double &kappa, arma::mat& Ci, arma::mat& C,
     n_accepted += 1;
     lpdf = l_prop;
   }
+  
+  return Rcpp::List::create(Rcpp::Named("kappa") = kappa,
+                            Rcpp::Named("C") = C,
+                            Rcpp::Named("C_inv") = Ci,
+                            Rcpp::Named("logdetC") = logdetC,
+                            Rcpp::Named("kappa_lpdf") = lpdf,
+                            Rcpp::Named("kappa_eps") = eps,
+                            Rcpp::Named("kappa_n_accepted") = n_accepted
+                            );
 }
 

@@ -48,6 +48,19 @@ double rig_cpp(double mu) {
   else return mu2 / x;
 }
 
+
+// Evaluate the density of an inverse gamma at x
+// a : shape, > 0
+// b : scale, > 0
+// log : return the log
+// [[Rcpp::export]]
+double ldinvgam(double x, double a, double b) {
+  if (a < 0.0) {std::cerr << "\nshape a must be non-negative\n";}
+  if (b < 0.0) {std::cerr << "\nscale b must be non-negative\n";}
+  double l = -(a - 1) * log(x) - b / x;
+  return l;
+}
+
 // // [[Rcpp::export]]
 // arma::mat lpmf_cpp(const arma::mat& Y, const arma::mat& X, const arma::mat& Z, 
 //                    const arma::mat& Z_int, int n,

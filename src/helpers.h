@@ -3,5 +3,6 @@
 
 double rgig_cpp(double lam, double psi, double chi);
 double rig_cpp(double mu); // default scale parameter = 1
+double ldinvgam(double x, double a, double b);
 
 #endif

@@ -35,3 +35,19 @@ update_U <- function(prm, Y, time, K, L, q, TT, n) {
   return(prm)
 }
 
+# Update kappa discrete options
+# Equal prior probabilities over the options of kappa
+# Returns index of the chosen kappa
+update_kappa_discrete <- function(Ci_all, ldetC_all, U, L, K, n_kappa_opts) {
+  log_prob <- rep(NA, n_kappa_opts)
+  for (i in 1:n_kappa_opts) {
+    log_prob[i] <-  llike_kappa(Ci_all[[i]], ldetC_all[[i]], U, L, K)
+  }
+  # From Kelly Moran's code: https://github.com/kelrenmor/bs3fa/blob/master/R/sample_lind.R
+  maxlg <- max(log_prob)
+  # https://stats.stackexchange.com/questions/66616/converting-normalizing-very-small-likelihood-values-to-probability
+  probls <- exp(log_prob - maxlg)
+  probls <- probls/sum(probls)
+  which_ls <- sample(x=(1:n_kappa_opts), 1, replace=T, prob=probls)
+  return(which_ls)
+}

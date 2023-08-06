@@ -372,28 +372,44 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// llike_kappa
+double llike_kappa(const arma::mat& Ci, double logdetC, const arma::cube& U, int L, int K);
+RcppExport SEXP _famr_llike_kappa(SEXP CiSEXP, SEXP logdetCSEXP, SEXP USEXP, SEXP LSEXP, SEXP KSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Ci(CiSEXP);
+    Rcpp::traits::input_parameter< double >::type logdetC(logdetCSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type U(USEXP);
+    Rcpp::traits::input_parameter< int >::type L(LSEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    rcpp_result_gen = Rcpp::wrap(llike_kappa(Ci, logdetC, U, L, K));
+    return rcpp_result_gen;
+END_RCPP
+}
 // update_kappa_cpp
-void update_kappa_cpp(double& kappa, arma::mat& Ci, arma::mat& C, double& logdetC, double& lpdf, arma::vec time, const arma::cube& U, double a, double b, int L, int K, double& eps, int s, int batch_size, int& n_accepted);
+Rcpp::List update_kappa_cpp(double kappa, arma::mat& Ci, arma::mat& C, double logdetC, double lpdf, arma::vec time, const arma::cube& U, double a, double b, int L, int K, double eps, int s, int batch_size, int n_accepted);
 RcppExport SEXP _famr_update_kappa_cpp(SEXP kappaSEXP, SEXP CiSEXP, SEXP CSEXP, SEXP logdetCSEXP, SEXP lpdfSEXP, SEXP timeSEXP, SEXP USEXP, SEXP aSEXP, SEXP bSEXP, SEXP LSEXP, SEXP KSEXP, SEXP epsSEXP, SEXP sSEXP, SEXP batch_sizeSEXP, SEXP n_acceptedSEXP) {
 BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double& >::type kappa(kappaSEXP);
+    Rcpp::traits::input_parameter< double >::type kappa(kappaSEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type Ci(CiSEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type C(CSEXP);
-    Rcpp::traits::input_parameter< double& >::type logdetC(logdetCSEXP);
-    Rcpp::traits::input_parameter< double& >::type lpdf(lpdfSEXP);
+    Rcpp::traits::input_parameter< double >::type logdetC(logdetCSEXP);
+    Rcpp::traits::input_parameter< double >::type lpdf(lpdfSEXP);
     Rcpp::traits::input_parameter< arma::vec >::type time(timeSEXP);
     Rcpp::traits::input_parameter< const arma::cube& >::type U(USEXP);
     Rcpp::traits::input_parameter< double >::type a(aSEXP);
     Rcpp::traits::input_parameter< double >::type b(bSEXP);
     Rcpp::traits::input_parameter< int >::type L(LSEXP);
     Rcpp::traits::input_parameter< int >::type K(KSEXP);
-    Rcpp::traits::input_parameter< double& >::type eps(epsSEXP);
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
     Rcpp::traits::input_parameter< int >::type s(sSEXP);
     Rcpp::traits::input_parameter< int >::type batch_size(batch_sizeSEXP);
-    Rcpp::traits::input_parameter< int& >::type n_accepted(n_acceptedSEXP);
-    update_kappa_cpp(kappa, Ci, C, logdetC, lpdf, time, U, a, b, L, K, eps, s, batch_size, n_accepted);
-    return R_NilValue;
+    Rcpp::traits::input_parameter< int >::type n_accepted(n_acceptedSEXP);
+    rcpp_result_gen = Rcpp::wrap(update_kappa_cpp(kappa, Ci, C, logdetC, lpdf, time, U, a, b, L, K, eps, s, batch_size, n_accepted));
+    return rcpp_result_gen;
 END_RCPP
 }
 // update_Omega_TPBN_cpp
@@ -604,6 +620,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_famr_update_Lambda_cpp", (DL_FUNC) &_famr_update_Lambda_cpp, 12},
     {"_famr_update_U_cpp", (DL_FUNC) &_famr_update_U_cpp, 13},
     {"_famr_covEQ", (DL_FUNC) &_famr_covEQ, 3},
+    {"_famr_llike_kappa", (DL_FUNC) &_famr_llike_kappa, 5},
     {"_famr_update_kappa_cpp", (DL_FUNC) &_famr_update_kappa_cpp, 15},
     {"_famr_update_Omega_TPBN_cpp", (DL_FUNC) &_famr_update_Omega_TPBN_cpp, 5},
     {"_famr_update_Omega_psi_cpp", (DL_FUNC) &_famr_update_Omega_psi_cpp, 8},

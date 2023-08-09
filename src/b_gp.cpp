@@ -14,8 +14,7 @@ using namespace arma;
  * n: number of unique subjects
  * M: (q, T, K)
  * V: (T, T, K)
-*/ 
-// [[Rcpp::export]]
+*/
 arma::cube update_B_GP_cpp(const arma::mat& Y, const arma::vec& time,
                      const arma::cube& Bt_eta_k, const arma::mat& eta, 
                      const arma::cube& C_inv, const arma::vec& psi, 
@@ -52,22 +51,6 @@ arma::cube update_B_GP_cpp(const arma::mat& Y, const arma::vec& time,
     }
     // sample Bk an (q \times T) matrix of regression coefs
     //    of factor k for q outcomes at T time points.
-    // try {
-    //   U = trimatu(arma::chol(V_k, "upper")); // U'U = V_k
-    // } catch(const std::exception &exc) {
-    //   std::cerr << exc.what();
-    //   cout << "\n update_B_GP_cpp chol(Vk)" << std::endl;
-    //   V_k.print();
-    // }
-    // try {
-    //   L = trimatl(arma::chol(Sigma, "lower")); // LL' = Sigma
-    // } catch(...) {
-    //   cout << "chol Sigma" << std::endl;
-    //   Sigma.print();
-    // }
-    // M_tmp = arma::solve(U, arma::solve(trimatl(U.t()), M_k.t())); // T \times q
-    // B.slice(k) = M_tmp.t() + 
-    // L * arma::solve(U, arma::randn<arma::mat>(T, q)).t();
     try {
       L = trimatl(arma::chol(V_k, "lower"));
     } catch(const std::exception &exc) {
@@ -87,7 +70,6 @@ arma::cube update_B_GP_cpp(const arma::mat& Y, const arma::vec& time,
 
 // Horse shoe prior as in Makalic & Schmidt 2015
 // B is a (q x T x K) cube
-// [[Rcpp::export]]
 arma::vec update_B_GP_amplitude_cpp(arma::vec& psi_sq, arma::vec& zeta,
                            double tau_sq, double phi, int K, int q, int T,
                            const arma::cube& Ci, const arma::mat& Si,
@@ -97,10 +79,10 @@ arma::vec update_B_GP_amplitude_cpp(arma::vec& psi_sq, arma::vec& zeta,
   for (int k=0; k < K; k++) {
     // psi_k \sim IG()
     CBSB = Ci.slice(k) * B.slice(k).t() * Si * B.slice(k);
-    // double rate = 1.0/zeta(k) + 0.5*arma::trace(CBSB)/tau_sq;
-    // psi_sq(k) = 1.0 / arma::randg<double>(distr_param(0.5*(q*T+1), 1.0/rate));
+    double rate = 1.0/zeta(k) + 0.5*arma::trace(CBSB)/tau_sq;
+    psi_sq(k) = 1.0 / arma::randg<double>(distr_param(0.5*(q*T+1), 1.0/rate));
     // zeta_k \sim IG(1, 1+1/psi_k)
-    // zeta(k) = 1.0 / arma::randg<double>(distr_param(1.0, psi_sq(k)/(1+psi_sq(k))));
+    zeta(k) = 1.0 / arma::randg<double>(distr_param(1.0, psi_sq(k)/(1+psi_sq(k))));
     tau_rate += arma::trace(CBSB)/psi_sq(k);
   }
   // tau_sq
@@ -116,30 +98,28 @@ arma::vec update_B_GP_amplitude_cpp(arma::vec& psi_sq, arma::vec& zeta,
   return tauphi;
 }
 
-// // q: number of outcomes; T: number of time points, B_k: (q, T, K) array
-// // [[Rcpp::export]]
-// arma::vec update_psi_GP_cpp(const arma::cube& B, const arma::mat& Sigmainv,
-//                             const arma::mat& C_inv, const arma::vec& zeta,
-//                             int K, int q, int T) {
-//   arma::vec psi(K);
-//   double u = 0.5;
-//   double lam = u - 0.5 * q * T;
-//   for (int k = 0; k < K; k++) {
-//     double chi = arma::trace(C_inv * B.slice(k).t() * Sigmainv * B.slice(k));
-//     double rgig_psi = 2 * zeta(k);
-//     psi(k) = rgig_cpp(lam, rgig_psi, chi);
-//   }
-//   return psi;
-// }
-// 
-// // [[Rcpp::export]]
-// arma::vec update_zeta_GP_cpp(arma::vec psi, int K, double global_shrink=1) {
-//   arma::vec zeta(K);
-//   double v = 0.5;
-//   for (int i = 0; i < K; i++) {
-//     double rate = psi(i) + global_shrink;
-//     zeta(i) = arma::randg<double>(arma::distr_param(v, 1/rate));
-//   }
-// 
-//   return zeta;
-// }
+// q: number of outcomes; T: number of time points, B_k: (q, T, K) array
+arma::vec update_psi_GP_cpp(const arma::cube& B, const arma::mat& Sigmainv,
+                            const arma::mat& C_inv, const arma::vec& zeta,
+                            int K, int q, int T) {
+  arma::vec psi(K);
+  double u = 0.5;
+  double lam = u - 0.5 * q * T;
+  for (int k = 0; k < K; k++) {
+    double chi = arma::trace(C_inv * B.slice(k).t() * Sigmainv * B.slice(k));
+    double rgig_psi = 2 * zeta(k);
+    psi(k) = rgig_cpp(lam, rgig_psi, chi);
+  }
+  return psi;
+}
+
+arma::vec update_zeta_GP_cpp(arma::vec psi, int K, double global_shrink=1) {
+  arma::vec zeta(K);
+  double v = 0.5;
+  for (int i = 0; i < K; i++) {
+    double rate = psi(i) + global_shrink;
+    zeta(i) = arma::randg<double>(arma::distr_param(v, 1/rate));
+  }
+
+  return zeta;
+}

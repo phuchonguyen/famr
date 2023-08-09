@@ -56,7 +56,7 @@ update_B_TPBN <- function(prm, Y, X, K, Z, Z_int) {
 update_B_TPBN_re <- function(prm, Y, X, K, Z, Z_int) {
   q <- ncol(Y)
   n <- nrow(Y)  # number of observations total: sum_i T_i
-  sinv <- 1/(1/prm$sigmay_sqinv + 1/prm$nu_sqinv) # TODO nu_sqinv
+  sinv <- 1/(1/prm$sigmay_sqinv + 0) # TODO nu_sqinv
   eta_int <- get_eta_int(prm$eta, K, Z, Z_int, prm$id)
   p <- ncol(eta_int)
   alpha <- update_intercept(Y - prm$Bt_eta - eta_int %*% prm$B, prm$Sigma/sinv)

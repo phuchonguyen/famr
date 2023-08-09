@@ -30,7 +30,7 @@ void update_Lambda_cpp(arma::mat& Lambda, const arma::cube& U,
     // multiply each row of Y, or Y(i) with X(l, i)
     // return sum of elements in each column of Y
     m = sum(Y.each_col() % X.row(l).t(), 0);
-    C = (S_inv * s + diagmat(S0_inv.col(l))).i();
+    C = (S_inv * s + S0_inv).i();
     M = C * S_inv * m.t();
     Lambda.col(l) = arma::mvnrnd(M, C);
   }
@@ -81,24 +81,6 @@ void update_U_cpp(arma::cube& U, const arma::mat& Y, const arma::mat& eta,
       DD.slice(l) = kron(eye(T, T), Lambda.col(l)); // Tq x T matrix
     }
     for (int i = 0; i < n; i++) {
-      // arma::vec o_i(T, fill::zeros);
-      // arma::uvec id_i = find(id == i);
-      // // fill y in with zero at unobserved time points
-      // arma::mat Y1_i(q, T, fill::zeros);
-      // for (int ii = 0; ii < id_i.n_elem; ii++) {
-      //   // create an indicator vector of time indices when outcomes are observed for subject i
-      //   o_i(time(id_i(ii))) = 1; // return time index of observation i
-      //   Y1_i.col(time(id_i(ii))) = Y.row(id_i(ii)).t();
-      // }
-      // // create vectorize y
-      // y1.col(i) = vectorise(Y1_i);
-      // cout << "\nO_i: " << all(o_i == o.col(i)) << " k=" << k << " i=" << i << endl;
-      // cout << "\nvec(Y0_i)==vec(Y1_i): " << all(y.col(i) == y1.col(i)) << endl;
-      // if (!all(y.col(i) == y1.col(i))) {
-      //   cout << "\nvec(Y0_i): " << y.col(i) << endl;
-      //   cout << "\nvec(Y1_i): " << y1.col(i) << endl;
-      // }
-      
       // creates the D_i^(lk) matrix as in paper
       D(i, k) = DD.each_slice() * diagmat(o.col(i)) * eta(i, k);
       
@@ -167,6 +149,9 @@ double llike_kappa(const arma::mat& Ci, double logdetC, const arma::cube& U,
 
 
 // time: all unique time points
+// lpdf: log posterior of current kappa
+// a: shape parameter for prior of kappa
+// b: scale parameter for prior of kappa
 // [[Rcpp::export]]
 Rcpp::List update_kappa_cpp(double kappa , arma::mat& Ci, arma::mat& C, 
                       double logdetC, double lpdf, arma::vec time,

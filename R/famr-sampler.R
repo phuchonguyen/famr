@@ -8,13 +8,14 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                  X_pred=NULL, Z_pred=NULL, Z_int_pred=NULL,
                  include_rep=FALSE, include_interactions=FALSE,
                  init_eta_eps=1e-2, init_a1_eps=1, init_a2_eps=1,
+                 eta_eps_power=-0.5,
                  Ilod=NULL, loda=NULL, lodb=NULL,
                  s0=0.084, r=2.5, verbose=FALSE, missing_Y=FALSE, binary=NULL,
                  eta=NULL, Theta=NULL, B=NULL, Sigma=NULL, sigmax_sqinv=NULL,
                  W=NULL, xi=NULL, sigmay_sqinv=NULL,
                  random_intercept=FALSE,
                  time=NULL, Bt=NULL, n_kappa_opts=10, time_pred=NULL,
-                 kappa_a=5.03, kappa_b=11.65,
+                 kappa_a=5.03, kappa_b=11.65, kappa_discrete=FALSE, kappa=NULL,
                  L=2, U=NULL, Lambda=NULL
                  ) {
   # stopifnot("K must be larger than 1" = K > 1)
@@ -110,11 +111,11 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   # er_min <- 1/(TT-1) + 1e-2 # corresponds to minimum effective range
   # er_max <- 1 - 1e-2 # corresponds roughly to eff range spanning all data
   # kappa_opts <- seq(er_to_kappa(er_min), er_to_kappa(er_max), length.out=n_kappa_opts)
-  kappa_opts <- seq(1 + 1e-2, 10 - 1e-2, length.out=n_kappa_opts) # TODO
+  kappa_opts <- seq(1 + 1e-2, TT - 1 - 1e-2, length.out=n_kappa_opts) # TODO
   C_all <- lapply(kappa_opts, function(l) covEQ(1:TT, kappa=l, amplitude=1))
   Ci_all <- lapply(C_all, function(V) chol2inv(chol(V))) # avoid using solve because numerical instability can make Ci not symmetric
   ldetC_all <- lapply(C_all, function(V) log(det(V)))
-  prm[["kappa"]] <- kappa_opts[n_kappa_opts %/% 2] #lapply(1:K, function(i) kappa_opts[n_kappa_opts %/% 2])
+  prm[["kappa"]] <- ifelse(is.null(kappa), kappa_opts[n_kappa_opts %/% 2], kappa) #lapply(1:K, function(i) kappa_opts[n_kappa_opts %/% 2])
   prm[["C"]] <- covEQ(1:TT, prm$kappa, 1) #lapply(1:K, function(i) C_all[[n_kappa_opts %/% 2]])
   prm[["C_inv"]] <- chol2inv(chol(prm$C)) #lapply(1:K, function(i) Ci_all[[n_kappa_opts %/% 2]])
   prm[["logdetC"]] <- log(det(prm$C))
@@ -126,6 +127,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   # ********************************************
   prm[["sigmax_sqinv"]] <- rgamma(p, 2.5*0.5, 2.5*0.084*0.5) # noise variance
   prm[["eta"]] <- array(rnorm(n * K, 0, 1), dim = c(n, K)) # random factors
+  prm[["eta_prop"]] <- array(0, dim=c(niter, n)) # storing proposal of eta_1 for debugging
   prm[["eta_n_accepted"]] <- rep(0, n) # MH acceptance
   prm[["eta_eps"]] <- rep(init_eta_eps, n) # MH proposal scales
   prm[["eta_A"]] <- array(0, dim = c(K, K, n)) # adaptive MH 
@@ -134,7 +136,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   # ********************************************
   # Multiplicative Gamma Process prior on the columns of loadings
   # ********************************************
-  prm[["Theta"]] <- array(rnorm(p * K, 0, 10), dim = c(p, K)) # loadings
+  prm[["Theta"]] <- array(rnorm(p * K, 0, 1), dim = c(p, K)) # loadings
   prm[["phi"]] <- array(rgamma(p * K, 1), dim = c(p, K)) # local shrinkage for Theta
   prm[["delta"]] <- rgamma(K, 1) # global shrinkage param for factor K
   prm[["a1"]] <- 2.5
@@ -184,7 +186,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                Bt_kappa = array(NA,  dim=c(niter - nwarmup, 1)),
                kappa_eps = array(NA,  dim=c(niter - nwarmup, 1)),
                Sigma = array(NA, dim = c(niter - nwarmup, q, q)),
-               nu_sqinv = matrix(NA, niter - nwarmup, 1),
+               # nu_sqinv = matrix(NA, niter - nwarmup, 1),
                Theta = array(NA, dim = c(niter - nwarmup, p, K)),
                Theta_tau = array(NA, dim = c(niter - nwarmup, K)),
                alpha = array(NA, dim=c(niter - nwarmup, q)),
@@ -240,7 +242,8 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
                                 n, K, p, q, p_z, p_int,
                                 s, adaptiveM = ((s>n_till_adaptive) & adaptiveM),
                                 adaptiveMWG = adaptiveMWG,
-                                adaptiveMWG_batch = adaptiveMWG_batch)
+                                adaptiveMWG_batch = adaptiveMWG_batch,
+                                eps_power = eta_eps_power)
       } else {
         prm[['eta']] <- eta # TODO: FOR DEBUGGING
       }
@@ -271,11 +274,22 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         for (kk in 1:K) {
           prm[['Bt']][kk,,] <- prm$Bt_Lambda %*% prm$Bt_U[,kk,]
         }
-        tmp <- update_kappa_cpp(prm$kappa, prm$C_inv, prm$C, prm$logdetC,
-                                prm$kappa_lpdf, 1:TT, prm$Bt_U, kappa_a, kappa_b,
-                                L, K, prm$kappa_eps, s, adaptiveMWG_batch,
-                                prm$kappa_n_accepted)
-        prm[names(tmp)] <- tmp
+        if (is.null(kappa)) {
+          if (kappa_discrete) {
+            #Update length-scale kappa using Bayes factor over a set of plausible values
+            which_ls <- update_kappa_discrete(Ci_all, ldetC_all, prm$Bt_U,
+                                              L, K, n_kappa_opts)
+            prm[['kappa']] <- kappa_opts[which_ls]
+            prm[['C']] <- C_all[[which_ls]]
+            prm[['C_inv']] <- Ci_all[[which_ls]]
+          } else {
+            tmp <- update_kappa_cpp(prm$kappa, prm$C_inv, prm$C, prm$logdetC,
+                                    prm$kappa_lpdf, 1:TT, prm$Bt_U, kappa_a, kappa_b,
+                                    L, K, prm$kappa_eps, s, adaptiveMWG_batch,
+                                    prm$kappa_n_accepted)
+            prm[names(tmp)] <- tmp
+          }
+        }
         # +++++++++++++++++++++++++++++++++++
         #
         # Gibbs step for main effect functions
@@ -312,13 +326,6 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         # kappa_eps <- tmp$epsilon
         # kappa_eps_bar <- tmp$epsilon_bar
         # kappa_H <- tmp$H
-        
-        #Update length-scale kappa using Bayes factor over a set of plausible values
-        # which_ls <- update_kappa_discrete(Ci_all, ldetC_all, prm$Bt_U,
-        #                                  L, K, n_kappa_opts)
-        # prm[['kappa']] <- kappa_opts[which_ls]
-        # prm[['C']] <- C_all[[which_ls]]
-        # prm[['C_inv']] <- Ci_all[[which_ls]]
       } else {
         # prm[['Bt']] <- Bt
         # prm[['Bt_psi']] <- rep(1, K)
@@ -352,12 +359,9 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
       # }
       ## Random intercept ------------------------------------------------------
       if (is.null(xi)) {
-        prm <- update_random_intercept(prm, Y)
+        # prm <- update_random_intercept(prm, Y)
       } else {
         prm[["xi"]] <- xi # TODO: FOR DEBUGGING
-        # a <- 3.2 + length(prm$uid)/2
-        # b <- 1/50 + sum(apply(prm$xi, 1, function(x) t(x) %*% prm$Sigmainv %*% x))/2
-        # prm$nu_sqinv <- rgamma(1, shape=a, rate=b)
       }
       ## Outcome covariance ----------------------------------------------------
       if (is.null(Sigma)) {
@@ -404,12 +408,18 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
     
     # store samples
     if (s > nwarmup) {
+      # # stop adaptive MH
+      # adaptiveMWG = F
+      # adaptiveM = F
+      # sims[["p_eta_accept"]] <- c(sims[["p_eta_accept"]],
+      #                             mean(prm$eta_n_accepted/(s-nwarmup)))
       # store adaptive MH diagnostics
       if ((s %% adaptiveMWG_batch == 0)) {
         sims[["p_eta_accept"]] <- c(sims[["p_eta_accept"]],
                                     mean(prm$eta_n_accepted/adaptiveMWG_batch))
         sims[["eta_eps"]] <- rbind(sims[["eta_eps"]], prm$eta_eps)
       }
+      
       sims[["eta"]][s-nwarmup,,] <- prm$eta
       sims[["sigmax_sqinv"]][s-nwarmup, ] <- prm$sigmax_sqinv
       sims[["Theta"]][s-nwarmup, , ] <- prm$Theta
@@ -438,9 +448,9 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         sims[['psi']][s-nwarmup, ] <- prm$psi
       }
       sims[["Sigma"]][s-nwarmup, , ] <- prm$Sigma
-      if (random_intercept) {
-        sims[['nu_sqinv']][s-nwarmup, ] <- prm$nu_sqinv
-      }
+      # if (random_intercept) {
+      #   sims[['nu_sqinv']][s-nwarmup, ] <- prm$nu_sqinv
+      # }
       
       # transformation to convert latent factor effects to effects in original predictors
       V <- solve(t(prm$Theta) %*% diag(prm$sigmax_sqinv, p, p) %*% prm$Theta + diag(1, K, K))
@@ -512,6 +522,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   if (s >= adaptiveMWG_batch) {
     message(paste("\nMetropolis-Hasting acceptance prob. of eta is",
                   round(tail(sims[["p_eta_accept"]], 1), 3)))
+    sims[["eta_prop"]] <- prm$eta_prop
   }
   message(paste("\nMetropolis-Hasting acceptance prob. of a1 is",
                 round(prm$a1_n_accepted/niter, 3)))

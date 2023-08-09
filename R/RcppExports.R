@@ -33,16 +33,8 @@ update_B_TPBN_cpp <- function(X, Y, Sigma, psi, p, q) {
     .Call(`_famr_update_B_TPBN_cpp`, X, Y, Sigma, psi, p, q)
 }
 
-update_B_GP_cpp <- function(Y, time, Bt_eta_k, eta, C_inv, psi, id, sinv, Sigma, K, q, T, n) {
-    .Call(`_famr_update_B_GP_cpp`, Y, time, Bt_eta_k, eta, C_inv, psi, id, sinv, Sigma, K, q, T, n)
-}
-
-update_B_GP_amplitude_cpp <- function(psi_sq, zeta, tau_sq, phi, K, q, T, Ci, Si, B) {
-    .Call(`_famr_update_B_GP_amplitude_cpp`, psi_sq, zeta, tau_sq, phi, K, q, T, Ci, Si, B)
-}
-
-update_eta_mh_cpp <- function(eta, Bt, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, time, K, p, q, n, p_int, n_accepted, eps, A, b, lpmf, s, adaptiveM = TRUE, adaptiveMWG = FALSE, batch_size = 50L) {
-    invisible(.Call(`_famr_update_eta_mh_cpp`, eta, Bt, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, time, K, p, q, n, p_int, n_accepted, eps, A, b, lpmf, s, adaptiveM, adaptiveMWG, batch_size))
+update_eta_mh_cpp <- function(eta, Bt, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, time, K, p, q, n, p_int, n_accepted, eps, A, b, lpmf, s, eta_prop, adaptiveM = TRUE, adaptiveMWG = FALSE, batch_size = 50L, eps_power = -0.5) {
+    invisible(.Call(`_famr_update_eta_mh_cpp`, eta, Bt, B, Theta, Omega, Sigmay_inv, sigmax_sqinv, Y, X, Z_int, uid, id, time, K, p, q, n, p_int, n_accepted, eps, A, b, lpmf, s, eta_prop, adaptiveM, adaptiveMWG, batch_size, eps_power))
 }
 
 rgig_cpp <- function(lam, psi, chi) {
@@ -135,9 +127,5 @@ update_omega_DL_cpp <- function(omega, phi, Theta, tau) {
 
 update_Theta_mh_cpp <- function(Theta, sigmax_sqinv, X, V0, n_accepted, eps, s, adaptiveMWG = TRUE) {
     invisible(.Call(`_famr_update_Theta_mh_cpp`, Theta, sigmax_sqinv, X, V0, n_accepted, eps, s, adaptiveMWG))
-}
-
-update_random_intercept_cpp <- function(xi, Y, id, uid, Sigma, sigmay_sqinv, nu_sqinv, q, n) {
-    invisible(.Call(`_famr_update_random_intercept_cpp`, xi, Y, id, uid, Sigma, sigmay_sqinv, nu_sqinv, q, n))
 }
 

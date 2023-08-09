@@ -103,8 +103,9 @@ void update_eta_mh_cpp(arma::mat& eta, const arma::cube Bt,
                        arma::vec& n_accepted, arma::vec& eps,
                        arma::cube& A, arma::mat& b, 
                        arma::vec& lpmf, int s,
+                       arma::mat& eta_prop,
                        bool adaptiveM = true, bool adaptiveMWG = false,
-                       int batch_size = 50
+                       int batch_size = 50, double eps_power = -0.5
                        ) {
   arma::rowvec prop(K);
   double logr;
@@ -127,11 +128,11 @@ void update_eta_mh_cpp(arma::mat& eta, const arma::cube Bt,
     } else if (adaptiveMWG) {
       // update scaling parameter every 50 iterations
       if ((s-1) % batch_size == 0) {
-        double d = min(0.05, std::pow((int)s/batch_size, -0.5));
+        double d = min(0.05, std::pow((int)s/batch_size, eps_power));
         // 0.44 is theoretically optimal acceptance rate for the latest 50 interations
         if ((n_accepted(i) / batch_size) > 0.44) {
           eps(i) += d;
-        } else {
+        } else if ((n_accepted(i) / batch_size) < 0.23){
           eps(i) -= d;
         }
         // reset acceptances counter
@@ -142,6 +143,8 @@ void update_eta_mh_cpp(arma::mat& eta, const arma::cube Bt,
       // Random walk proposal with scaling parameter eps
       prop = eta.row(i) + std::exp(2*eps(i)) * randn<rowvec>(K);
     }
+    // for DEBUGGING
+    eta_prop(s-1,i) = prop(0);
     // log likelihood of the proposal
     llike_prop = llike(prop, Bt, B, Theta, Omega, Sigmay_inv, sigmax_sqinv,
                        Y, X.row(i), Z_int, idi, time, q, K, p_int, p);

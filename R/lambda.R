@@ -1,5 +1,5 @@
 update_Lambda <- function(Y, time, K, L, q, prm) {
-  S_inv <- prm$Sigmainv * 1/(1/prm$sigmay_sqinv + 0) # TODO update: marginalize out linear effect B
+  S_inv <- prm$Sigmainv * 1/(1/prm$sigmay_sqinv + 0) # TODO nu_sqinv update: marginalize out linear effect B
   Ytilde <- Y - tcrossprod(rep(1, nrow(Y)), prm$alpha) - prm$eta_int %*% prm$B
   update_Lambda_cpp(prm$Bt_Lambda, prm$Bt_U, 
                     Ytilde, prm$eta[prm$numeric_id,,drop=FALSE],
@@ -23,7 +23,7 @@ update_Lambda <- function(Y, time, K, L, q, prm) {
 # TT: number of unique time points
 # n: number of unique subjects
 update_U <- function(prm, Y, time, K, L, q, TT, n) {
-  S0_inv <- chol2inv(chol(diag(1, TT, TT) + matrix(1, TT, TT)*1/prm$nu_sqinv)) # TODO nu_sqinv
+  S0_inv <- chol2inv(chol(diag(1, TT, TT) + matrix(1, TT, TT)*0)) # TODO nu_sqinv
   S_inv <- kronecker(prm$Sigmainv, S0_inv)
   stopifnot(all(dim(S_inv), c(TT*q, TT*q)))
   Ytilde <- Y - tcrossprod(rep(1, nrow(Y)), prm$alpha) - prm$eta_int %*% prm$B

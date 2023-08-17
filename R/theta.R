@@ -12,12 +12,15 @@ update_Theta_MGP <- function(prm, X, K) {
   delta <- update_delta_MGP_cpp(prm$delta, cumprod(prm$delta), 
                                 Theta, phi, 
                                 K, ncol(X), prm$a1, prm$a2)
-  a1_out <- update_a1_MGP(prm$a1, delta, prm$a1_eps, prm$a1_n_accepted)
-  a2_out <- update_a2_MGP(prm$a2, delta, prm$a2_eps, prm$a2_n_accepted, K)
-  return(c(list(Theta = Theta, 
-                phi = phi, 
-                delta = delta),
-           a1_out, a2_out))
+  # a1_out <- update_a1_MGP(prm$a1, delta, prm$a1_eps, prm$a1_n_accepted)
+  # a2_out <- update_a2_MGP(prm$a2, delta, prm$a2_eps, prm$a2_n_accepted, K)
+  # return(c(list(Theta = Theta, 
+  #               phi = phi, 
+  #               delta = delta),
+  #          a1_out, a2_out))
+  return(list(Theta = Theta,
+              phi = phi,
+              delta = delta))
 }
 
 update_a1_MGP <- function(a1, delta, eps, a1_n_accepted) {

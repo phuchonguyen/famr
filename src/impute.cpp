@@ -41,16 +41,17 @@ arma::mat impute_X_lod_cpp(arma::mat eta, arma::mat Theta, arma::mat X, arma::ve
 
 // [[Rcpp::export]]
 arma::mat impute_Ymis_cpp(arma::mat Y, arma::mat M, arma::mat Sigma, 
-                          arma::mat O, int n, int t) {
+                          arma::mat O, int n, int q) {
   arma::uvec mis_id = find(sum(O, 1) > 0);
   for (int j = 0; j < (int) mis_id.n_elem; j++) {
     int i = mis_id(j);
-    arma::rowvec yi = Y.row(i), mi = M.row(i);
-    arma::uvec mis = find(O.row(i) == 0);
-    arma::uvec obs = find(O.row(i) == 1);
-    if ((int) mis.n_elem == t) { // all values missing 
-      yi = mi;
+    arma::uvec mis = find(O.row(i) == 1);
+    arma::uvec obs = find(O.row(i) == 0);
+    arma::rowvec mi = M.row(i);
+    if ((int) mis.n_elem == q) { // all values missing 
+      Y.row(i) = arma::mvnrnd(mi.t(), Sigma).t();
     } else if ((int) mis.n_elem > 0) {
+      arma::rowvec yi = Y.row(i);
       arma::mat Saa_inv = arma::inv(submat_cpp(Sigma, obs, obs));
       arma::mat Sba = submat_cpp(Sigma, mis, obs);
       arma::mat Sigma_b = submat_cpp(Sigma, mis, mis) - Sba * Saa_inv * Sba.t();
@@ -60,8 +61,8 @@ arma::mat impute_Ymis_cpp(arma::mat Y, arma::mat M, arma::mat Sigma,
       } else {
         yi.elem(mis) = arma::mvnrnd(m_b.t(), Sigma_b).t();
       }
+      Y.row(i) = yi;
     }
-    Y.row(i) = yi;
   }
   
   return Y;

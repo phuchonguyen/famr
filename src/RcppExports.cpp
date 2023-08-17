@@ -243,8 +243,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // impute_Ymis_cpp
-arma::mat impute_Ymis_cpp(arma::mat Y, arma::mat M, arma::mat Sigma, arma::mat O, int n, int t);
-RcppExport SEXP _famr_impute_Ymis_cpp(SEXP YSEXP, SEXP MSEXP, SEXP SigmaSEXP, SEXP OSEXP, SEXP nSEXP, SEXP tSEXP) {
+arma::mat impute_Ymis_cpp(arma::mat Y, arma::mat M, arma::mat Sigma, arma::mat O, int n, int q);
+RcppExport SEXP _famr_impute_Ymis_cpp(SEXP YSEXP, SEXP MSEXP, SEXP SigmaSEXP, SEXP OSEXP, SEXP nSEXP, SEXP qSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -253,8 +253,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat >::type Sigma(SigmaSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type O(OSEXP);
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< int >::type t(tSEXP);
-    rcpp_result_gen = Rcpp::wrap(impute_Ymis_cpp(Y, M, Sigma, O, n, t));
+    Rcpp::traits::input_parameter< int >::type q(qSEXP);
+    rcpp_result_gen = Rcpp::wrap(impute_Ymis_cpp(Y, M, Sigma, O, n, q));
     return rcpp_result_gen;
 END_RCPP
 }

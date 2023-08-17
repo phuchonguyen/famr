@@ -38,10 +38,10 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   Xmean <- colMeans(X)
   X <- scale(X, center = T, scale = F)
   # Indicator matrix dim=dim(Y) of if there are missing values in Y:
-  O <- (!is.na(Y))*1 # indicators of observed Y
+  O <- is.na(Y) * 1 # indicators of unobserved Y
   if (missing_Y) { # initialize missing values to be zero
-    Y[O == 0] <- 0
-    Yraw <- Y
+    Y[O == 1] <- 0
+    # Yraw <- Y
   }
   if (is.null(colnames(X))) colnames(X) <- paste0("x", 1:p)
   if (is.null(p_z)) p_z <- 0
@@ -98,8 +98,8 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   prm[['Bt_Lambda']] <- matrix(rnorm(q * L), q, L)
   prm[['Bt_phi']] <- array(rgamma(q * L, 1), dim = c(q, L)) # local shrinkage for Theta
   prm[["Bt_delta"]] <- rgamma(L, 1) # global shrinkage param for factor K
-  prm[['Bt_a1']] <- 2.1
-  prm[['Bt_a2']] <- 3.1
+  prm[['Bt_a1']] <- 2
+  prm[['Bt_a2']] <- 3
   prm[['Bt_U']] <- array(rnorm(L * K * TT), dim = c(L, K, TT))
   # ***** Length-scale for GP *************************
   # From Kelly Moran's code: https://github.com/kelrenmor/bs3fa/tree/master
@@ -139,8 +139,8 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   prm[["Theta"]] <- array(rnorm(p * K, 0, 1), dim = c(p, K)) # loadings
   prm[["phi"]] <- array(rgamma(p * K, 1), dim = c(p, K)) # local shrinkage for Theta
   prm[["delta"]] <- rgamma(K, 1) # global shrinkage param for factor K
-  prm[["a1"]] <- 2.5
-  prm[["a2"]] <- 3.5
+  prm[["a1"]] <- 2
+  prm[["a2"]] <- 3
   prm[["a1_n_accepted"]] <- 0L
   prm[["a2_n_accepted"]] <- 0L
   prm[["a1_eps"]] <- init_a1_eps
@@ -205,6 +205,9 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
   if (include_rep) {
     sims[["Y_rep"]] = array(NA, dim=c(niter - nwarmup, dim(Y)))
   }
+  if (missing_Y) {
+    sims[["Y_imputed"]] = array(NA, dim=c(niter - nwarmup, dim(Y)))
+  }
   if (!is.null(X_pred)) {
     sims[["E_Y_pred"]] = array(0, dim=c(niter - nwarmup, nrow(X_pred), q))
     X_pred_int <- get_eta_int(X_pred, p, Z_pred, Z_int_pred, 1:nrow(X_pred))
@@ -233,17 +236,29 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
     prm[names(tmp)] <- tmp
     ## Outcome updates ---------------------------------------------------------
     ## Include random intercepts
+    tmp_s <- nwarmup
     if (random_intercept) {
       ## eta using Adaptive Metropolis-within-Gibbs -----------------------------
       if (is.null(eta)) {
-        # TODO: Update Ytilda to use time-varying main effects B(t)
-        prm <- update_eta_mh_re(prm, Y, 
-                                X, Z, Z_int, time,
-                                n, K, p, q, p_z, p_int,
-                                s, adaptiveM = ((s>n_till_adaptive) & adaptiveM),
-                                adaptiveMWG = adaptiveMWG,
-                                adaptiveMWG_batch = adaptiveMWG_batch,
-                                eps_power = eta_eps_power)
+        # TODO: not update eta every iterations
+        if (s <= nwarmup) {
+          prm <- update_eta_mh_re(prm, Y, 
+                                  X, Z, Z_int, time,
+                                  n, K, p, q, p_z, p_int,
+                                  s, adaptiveM = ((s>n_till_adaptive) & adaptiveM),
+                                  adaptiveMWG = adaptiveMWG,
+                                  adaptiveMWG_batch = adaptiveMWG_batch,
+                                  eps_power = eta_eps_power)
+        } else if (s %% 10 == 0) {
+          tmp_s <- tmp_s + 1
+          prm <- update_eta_mh_re(prm, Y, 
+                                  X, Z, Z_int, time,
+                                  n, K, p, q, p_z, p_int,
+                                  tmp_s, adaptiveM = ((tmp_s>n_till_adaptive) & adaptiveM),
+                                  adaptiveMWG = adaptiveMWG,
+                                  adaptiveMWG_batch = adaptiveMWG_batch,
+                                  eps_power = eta_eps_power)
+        }
       } else {
         prm[['eta']] <- eta # TODO: FOR DEBUGGING
       }
@@ -327,24 +342,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         # kappa_eps_bar <- tmp$epsilon_bar
         # kappa_H <- tmp$H
       } else {
-        # prm[['Bt']] <- Bt
-        # prm[['Bt_psi']] <- rep(1, K)
-        # prm[['Bt_tau']] <- 1
-        # tauphi <- update_B_GP_amplitude_cpp(prm$Bt_psi, prm$Bt_zeta,
-        #                                     prm$Bt_tau, prm$Bt_phi, K, q, TT,
-        #                                     abind::abind(prm$C_inv, along=3), 
-        #                                     prm$Sigmainv,
-        #                                     aperm(prm$Bt, c(2, 3, 1))) # convert B from a (K, q, TT) to a (q, TT, K) array
-        # prm[['Bt_tau']] <- tauphi[1]
-        # prm[['Bt_phi']] <- tauphi[2]
-        # which_ls <- lapply(1:K, function(k) {
-        #   update_kappa_discrete(Ci_all, ldetC_all, prm$Bt[k,,,drop=F],
-        #                         prm$Sigmainv, prm$Bt_psi*prm$Bt_tau,
-        #                         q, 1, n_kappa_opts)
-        # })
-        # prm[['kappa']] <- lapply(which_ls, function(ls) kappa_opts[ls])
-        # prm[['C']] <- lapply(which_ls, function(ls) C_all[[ls]])
-        # prm[['C_inv']] <- lapply(which_ls, function(ls) Ci_all[[ls]])
+        prm[['Bt']] <- Bt
       }
       prm[['Bt_eta']] <- sapply(1:nrow(Y), function(i) 
         prm$eta[prm$numeric_id[i],] %*% prm$Bt[,,time[i]]) %>% t()
@@ -365,7 +363,7 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
       }
       ## Outcome covariance ----------------------------------------------------
       if (is.null(Sigma)) {
-        tmp <- update_Sigma_IW_TPBN_re(prm, Y, Z, Z_int, K, TT, binary, n)
+        tmp <- update_Sigma_IW_TPBN_re(prm, Y, Z, Z_int, K, TT, n)
         prm[names(tmp)] <- tmp
       } else {
         prm[['Sigma']] <- Sigma
@@ -397,14 +395,15 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
     }
     
     # Imputation
-    # if (!is.null(Ilod) & !is.null(loda) & !is.null(lodb)) {
-    #   X <- impute_X(prm, X, Ilod, loda, lodb, Xmean)
-    # }
-    # if ((missing_Y & !is.null(O)) | sum(binary) > 0) {
-    #   out_Ymis <- impute_Y(prm, X, K, Z, Z_int, Y, O, binary, Yraw, missing_Y)
-    #   Y <- out_Ymis$Y
-    #   Yraw <- out_Ymis$Yraw
-    # }
+    if (!is.null(Ilod) & !is.null(loda) & !is.null(lodb)) {
+      X <- impute_X(prm, X, Ilod, loda, lodb, Xmean)
+    }
+    if (missing_Y & (sum(O) > 0)) {
+      Y <- impute_Y(prm, X, K, Z, Z_int, Y, O, missing_Y)$Y
+      # out_Ymis <- impute_Y(prm, X, K, Z, Z_int, Y, O, binary, Yraw, missing_Y)
+      # Y <- out_Ymis$Y
+      # Yraw <- out_Ymis$Yraw
+    }
     
     # store samples
     if (s > nwarmup) {
@@ -498,6 +497,10 @@ famr <- function(niter, Y, X, K=2, Z=NULL, Z_int=NULL, id=NULL,
         #   Y_rep[, binary == 1] <- 1 * (Y_rep[, binary == 1] > 0)
         # }
         sims[["Y_rep"]][s-nwarmup, , ] <- Y_rep
+      }
+      
+      if (missing_Y) {
+        sims[["Y_imputed"]][s-nwarmup, , ] <- Y
       }
       
       # Predicted outcomes for new data: returns E(y_i | x_i)

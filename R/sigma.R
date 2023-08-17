@@ -48,7 +48,7 @@ update_sigmax_sqinv <- function(prm, X, K, s0=0.084, r=2.5) {
 }
 
 # When there is random intercepts
-update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, TT, binary, N) {
+update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, TT, N) {
   p <- ncol(prm$eta_int) # number of linear predictor terms: interactions, main effects of covariates
   n <- nrow(Y) # number of observations total: sum_i T_i
   q <- ncol(Y)
@@ -81,10 +81,10 @@ update_Sigma_IW_TPBN_re <- function(prm, Y, Z, Z_int, K, TT, binary, N) {
   if (q == 1) {
     Sigma = matrix(Sigma, 1, 1)
   }
-  if (sum(binary) > 0) {
-    d <- 1/sqrt(diag(Sigma))
-    d[binary==0] <- 1
-    Sigma <- diag(d)%*%Sigma%*%diag(d)
-  }
+  # if (sum(binary) > 0) {
+  #   d <- 1/sqrt(diag(Sigma))
+  #   d[binary==0] <- 1
+  #   Sigma <- diag(d)%*%Sigma%*%diag(d)
+  # }
   return(list(Sigma = Sigma, Sigmainv = Sigmainv))
 }

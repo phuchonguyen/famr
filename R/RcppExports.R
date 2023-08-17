@@ -57,8 +57,8 @@ impute_X_lod_cpp <- function(eta, Theta, X, sigmax_sqinv, n, Ilod, llod, ulod) {
     .Call(`_famr_impute_X_lod_cpp`, eta, Theta, X, sigmax_sqinv, n, Ilod, llod, ulod)
 }
 
-impute_Ymis_cpp <- function(Y, M, Sigma, O, n, t) {
-    .Call(`_famr_impute_Ymis_cpp`, Y, M, Sigma, O, n, t)
+impute_Ymis_cpp <- function(Y, M, Sigma, O, n, q) {
+    .Call(`_famr_impute_Ymis_cpp`, Y, M, Sigma, O, n, q)
 }
 
 impute_Yprobit_cpp <- function(Y, M, Sigma, Yraw, binary, n, t) {

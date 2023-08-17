@@ -6,7 +6,6 @@
 using namespace std;
 using namespace arma;
 
-// [[Rcpp::export]]
 void update_random_intercept_cpp(arma::mat& xi, const arma::mat& Y,
                                  const arma::vec& id, const arma::vec& uid,
                                  const arma::mat& Sigma,
